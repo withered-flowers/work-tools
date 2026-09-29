@@ -58,20 +58,6 @@
   let newAssignTemplates = $state("");
 
   let parsedPlans = $state<ProvisionPlan[]>([]);
-  let lastParsedAssignmentsSnapshot = $state("");
-  let lastParsedTemplatesJson = $state("");
-  let lastParsedOrg = $state("");
-
-  let currentAssignmentsSnapshot = $derived(JSON.stringify(assignments));
-  let currentTemplatesSnapshot = $derived(JSON.stringify(templates));
-
-  let hasUnparsedChanges = $derived(
-    currentAssignmentsSnapshot !== lastParsedAssignmentsSnapshot ||
-    currentTemplatesSnapshot !== lastParsedTemplatesJson ||
-    orgName.trim() !== lastParsedOrg.trim()
-  );
-
-  let isParsing = $state(false);
   let isRunning = $state(false);
 
   let currentProgress = $state<RepoProvisionProgress | null>(null);
@@ -86,10 +72,24 @@
   }>>([]);
 
   let unlistenProgress: (() => void) | null = null;
+  let previewTimer: ReturnType<typeof setTimeout> | null = null;
+
+  $effect(() => {
+    const inputText = getRawAssignmentsText();
+    const _catalogSnapshot = templates.map((t) => `${t.key ?? ""}|${t.repo}|${t.deadline}`).join(";;");
+    const currentOrg = orgName.trim();
+
+    if (previewTimer) clearTimeout(previewTimer);
+    previewTimer = setTimeout(() => {
+      updatePreview(inputText, templates, currentOrg);
+    }, 60);
+
+    return () => {
+      if (previewTimer) clearTimeout(previewTimer);
+    };
+  });
 
   onMount(async () => {
-    await updatePreview();
-
     unlistenProgress = await listen<RepoProvisionProgress>(
       "repo-provision-progress",
       (event) => {
@@ -110,6 +110,7 @@
   });
 
   onDestroy(() => {
+    if (previewTimer) clearTimeout(previewTimer);
     if (unlistenProgress) {
       unlistenProgress();
     }
@@ -127,24 +128,20 @@
       .join("\n");
   }
 
-  async function updatePreview() {
-    isParsing = true;
+  async function updatePreview(inputText?: string, catalog?: TemplateEntry[], targetOrg?: string) {
     try {
-      const inputText = getRawAssignmentsText();
+      const text = inputText !== undefined ? inputText : getRawAssignmentsText();
+      const cat = catalog !== undefined ? catalog : templates;
+      const org = targetOrg !== undefined ? targetOrg : orgName;
       const plans: ProvisionPlan[] = await invoke("preview_repo_provisioning", {
-        inputText,
-        catalog: templates,
-        orgName,
+        inputText: text,
+        catalog: cat,
+        orgName: org,
       });
       parsedPlans = plans;
-      lastParsedAssignmentsSnapshot = JSON.stringify(assignments);
-      lastParsedTemplatesJson = JSON.stringify(templates);
-      lastParsedOrg = orgName;
     } catch (e: any) {
       console.error("Provisioning preview error:", e);
       onLog("error", `Provisioning preview error: ${e}`);
-    } finally {
-      isParsing = false;
     }
   }
 
@@ -353,7 +350,6 @@
     reviewersInput = "";
     templates = [];
     assignments = [];
-    lastParsedAssignmentsSnapshot = "";
     parsedPlans = [];
     currentProgress = null;
     summary = null;
@@ -363,7 +359,6 @@
 
   function clearAssignments() {
     assignments = [];
-    lastParsedAssignmentsSnapshot = "";
     parsedPlans = [];
     currentProgress = null;
     summary = null;
@@ -372,9 +367,6 @@
   }
 
   async function runProvisioning() {
-    if (hasUnparsedChanges) {
-      await updatePreview();
-    }
     if (!dryRun && !token.trim()) {
       alert("GitHub Token is required to execute real repository provisioning. Please provide and verify your token in the top header.");
       return;
@@ -805,26 +797,7 @@
           <span class="syntax-guide">
             Specify student username, optional prefix, and template keys/names for each assignment, or import a Provisioning <code>.yaml</code> file.
           </span>
-          {#if hasUnparsedChanges}
-            <span class="unparsed-indicator">
-              <Icon name="alert" size={12} color="#b45309" />
-              Unparsed changes pending
-            </span>
-          {/if}
         </div>
-        <button
-          type="button"
-          class="btn-reparse {hasUnparsedChanges ? 'btn-reparse-pending' : ''}"
-          onclick={updatePreview}
-          disabled={isParsing}
-          title="Click or touch to parse assignments and refresh pre-flight repository matrix"
-        >
-          <Icon name="refresh" size={13} color={hasUnparsedChanges ? "#ffffff" : "#4f46e5"} />
-          <span>{isParsing ? "Parsing..." : "Re-parse"}</span>
-          {#if hasUnparsedChanges}
-            <span class="pending-dot"></span>
-          {/if}
-        </button>
       </div>
     </section>
 
@@ -834,11 +807,6 @@
         <div class="panel-title-group">
           <Icon name="check-circle" size={16} color="#059669" />
           <h3>3. Pre-Flight Repository Matrix</h3>
-          {#if hasUnparsedChanges}
-            <span class="preview-stale-tag" title="Click Re-parse to preview latest assignments and catalog">
-              Unparsed Changes
-            </span>
-          {/if}
         </div>
         <div class="badge-cluster">
           <span class="kpi-pill kpi-accent">
@@ -1574,80 +1542,6 @@
     color: #4f46e5;
     border: 1px solid #e2e8f0;
   }
-
-  .unparsed-indicator {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    font-size: 0.725rem;
-    font-weight: 600;
-    color: #b45309;
-    background: #fffbeb;
-    border: 1px solid #fde68a;
-    padding: 0.15rem 0.5rem;
-    border-radius: 4px;
-    width: fit-content;
-  }
-
-  .btn-reparse {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    background: #f8fafc;
-    border: 1px solid #cbd5e1;
-    color: #334155;
-    padding: 0.42rem 0.85rem;
-    border-radius: 7px;
-    font-size: 0.775rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  }
-
-  .btn-reparse:hover:not(:disabled) {
-    background: #eef2ff;
-    color: #4f46e5;
-    border-color: #c7d2fe;
-    box-shadow: 0 1px 3px rgba(79, 70, 229, 0.12);
-  }
-
-  .btn-reparse-pending {
-    background: #4f46e5 !important;
-    border-color: #4338ca !important;
-    color: #ffffff !important;
-    box-shadow: 0 2px 8px rgba(79, 70, 229, 0.3);
-  }
-
-  .btn-reparse-pending:hover:not(:disabled) {
-    background: #4338ca !important;
-    box-shadow: 0 4px 12px rgba(79, 70, 229, 0.4);
-  }
-
-  .pending-dot {
-    width: 6px;
-    height: 6px;
-    background: #ffffff;
-    border-radius: 50%;
-    animation: pulse-dot 1.5s infinite;
-  }
-
-  @keyframes pulse-dot {
-    0%, 100% { opacity: 1; transform: scale(1); }
-    50% { opacity: 0.4; transform: scale(0.8); }
-  }
-
-  .preview-stale-tag {
-    display: inline-flex;
-    align-items: center;
-    font-size: 0.675rem;
-    font-weight: 600;
-    color: #b45309;
-    background: #fffbeb;
-    border: 1px solid #fde68a;
-    padding: 0.15rem 0.5rem;
-    border-radius: 9999px;
-  }
-
   /* Badge Cluster */
   .badge-cluster {
     display: flex;
