@@ -17,7 +17,7 @@ pub struct TeamItem {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TemplateEntry {
     pub key: Option<String>,
-    pub repo: String, // e.g. "FTDS-Assignment-Bay-2/P0-LC1-Set-1"
+    pub repo: String,     // e.g. "ORGANIZATION-NAME/P0-LC1-Set-1"
     pub deadline: String, // e.g. "2026-12-31 23:59"
 }
 
@@ -175,13 +175,23 @@ pub fn resolve_template_info(
     }
 
     let org = if matched_repo.contains('/') {
-        matched_repo.split('/').next().unwrap_or("").trim().to_string()
+        matched_repo
+            .split('/')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_string()
     } else {
         org_name.trim().to_string()
     };
 
     let repo_basename = if matched_repo.contains('/') {
-        matched_repo.split('/').nth(1).unwrap_or(&matched_repo).trim().to_string()
+        matched_repo
+            .split('/')
+            .nth(1)
+            .unwrap_or(&matched_repo)
+            .trim()
+            .to_string()
     } else {
         matched_repo.clone()
     };
@@ -205,7 +215,7 @@ pub fn parse_repo_assignments(
     default_org: &str,
 ) -> Vec<ProvisionPlan> {
     // Stage 1: Collect raw (username, prefix, templates)
-    let prefix_regex = Regex::new(r"^(FTDS-\d{3}-(HCK|RMT)|FTDS-)").unwrap();
+    let prefix_regex = Regex::new(r"^((BATCH|COHORT|CLASS|PREFIX)-\d{3}-(DEV|REM|ONL|[A-Za-z0-9]+)|(BATCH|COHORT|CLASS|PREFIX)-|[A-Za-z0-9]+-\d{3}-[A-Za-z0-9]+)").unwrap();
     let date_regex = Regex::new(r"^\d{4}-\d{2}-\d{2}").unwrap();
 
     let mut raw_assignments: Vec<(String, String, String)> = Vec::new();
@@ -243,7 +253,11 @@ pub fn parse_repo_assignments(
                     } else {
                         (u_trim, fallback_prefix.trim())
                     };
-                    raw_assignments.push((u_name.to_string(), u_pref.to_string(), t_repo.to_string()));
+                    raw_assignments.push((
+                        u_name.to_string(),
+                        u_pref.to_string(),
+                        t_repo.to_string(),
+                    ));
                 }
             } else if parts.len() >= 3 {
                 let u = parts[0].to_string();
@@ -259,10 +273,18 @@ pub fn parse_repo_assignments(
                 if prefix_regex.is_match(parts[1]) {
                     raw_assignments.push((u, parts[1].to_string(), "all".to_string()));
                 } else {
-                    raw_assignments.push((u, fallback_prefix.trim().to_string(), parts[1].to_string()));
+                    raw_assignments.push((
+                        u,
+                        fallback_prefix.trim().to_string(),
+                        parts[1].to_string(),
+                    ));
                 }
             } else {
-                raw_assignments.push((parts[0].to_string(), fallback_prefix.trim().to_string(), "all".to_string()));
+                raw_assignments.push((
+                    parts[0].to_string(),
+                    fallback_prefix.trim().to_string(),
+                    "all".to_string(),
+                ));
             }
         } else if line.contains(',') {
             let parts: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
@@ -285,7 +307,11 @@ pub fn parse_repo_assignments(
                 raw_assignments.push((u, p, t));
             }
         } else {
-            raw_assignments.push((line.to_string(), fallback_prefix.trim().to_string(), "all".to_string()));
+            raw_assignments.push((
+                line.to_string(),
+                fallback_prefix.trim().to_string(),
+                "all".to_string(),
+            ));
         }
     }
 
@@ -298,10 +324,7 @@ pub fn parse_repo_assignments(
     }
 
     // Default template keys for wildcard "all"
-    let all_catalog_keys: Vec<String> = dynamic_catalog
-        .iter()
-        .map(|t| t.repo.clone())
-        .collect();
+    let all_catalog_keys: Vec<String> = dynamic_catalog.iter().map(|t| t.repo.clone()).collect();
 
     // Stage 3: Resolve plans for each user
     let mut plans = Vec::new();
@@ -316,11 +339,16 @@ pub fn parse_repo_assignments(
                     user_prefix = p.clone();
                 }
 
-                let t_candidates: Vec<String> = if t_raw == "all" || t_raw == "*" || t_raw.is_empty() {
-                    all_catalog_keys.clone()
-                } else {
-                    t_raw.split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect()
-                };
+                let t_candidates: Vec<String> =
+                    if t_raw == "all" || t_raw == "*" || t_raw.is_empty() {
+                        all_catalog_keys.clone()
+                    } else {
+                        t_raw
+                            .split(',')
+                            .map(|s| s.trim().to_string())
+                            .filter(|s| !s.is_empty())
+                            .collect()
+                    };
 
                 for t_item in t_candidates {
                     if !user_templates.contains(&t_item) {
@@ -331,7 +359,8 @@ pub fn parse_repo_assignments(
         }
 
         for t_query in user_templates {
-            let resolved = resolve_template_info(&t_query, &dynamic_catalog, default_deadline, default_org);
+            let resolved =
+                resolve_template_info(&t_query, &dynamic_catalog, default_deadline, default_org);
             let target_repo_name = if !user_prefix.is_empty() {
                 format!("{}-{}-{}", resolved.clean_repo_name, user_prefix, user)
             } else {
@@ -409,34 +438,36 @@ janedoe,phase-1-set-1,phase-2-set-1
         let catalog = vec![
             TemplateEntry {
                 key: None,
-                repo: "FTDS-Assignment-Bay-2/P0-LC1-Set-1".to_string(),
+                repo: "ORGANIZATION-NAME/P0-LC1-Set-1".to_string(),
                 deadline: "2026-12-31 23:59".to_string(),
             },
             TemplateEntry {
                 key: None,
-                repo: "FTDS-Assignment-Bay-2/P0-LC2-Set-1".to_string(),
+                repo: "ORGANIZATION-NAME/P0-LC2-Set-1".to_string(),
                 deadline: "2026-12-31 23:59".to_string(),
             },
         ];
 
-        let input = "user1,FTDS-045-HCK,P0-LC1-Set-1,P0-LC2-Set-1";
+        let input = "user1,BATCH-045-DEV,P0-LC1-Set-1,P0-LC2-Set-1";
         let plans = parse_repo_assignments(
             input,
             &catalog,
             "FALLBACK",
             "2026-12-31 23:59",
-            "FTDS-Assignment-Bay-2",
+            "ORGANIZATION-NAME",
         );
 
         assert_eq!(plans.len(), 2);
         assert_eq!(plans[0].username, "user1");
-        assert_eq!(plans[0].prefix, "FTDS-045-HCK");
-        assert_eq!(plans[0].target_repo_name, "P0-LC1-Set-1-FTDS-045-HCK-user1");
+        assert_eq!(plans[0].prefix, "BATCH-045-DEV");
+        assert_eq!(
+            plans[0].target_repo_name,
+            "P0-LC1-Set-1-BATCH-045-DEV-user1"
+        );
         assert_eq!(
             plans[0].full_target_repo,
-            "FTDS-Assignment-Bay-2/P0-LC1-Set-1-FTDS-045-HCK-user1"
+            "ORGANIZATION-NAME/P0-LC1-Set-1-BATCH-045-DEV-user1"
         );
         assert_eq!(plans[0].deadline_iso, "2026-12-31T23:59:00+07:00");
     }
 }
-

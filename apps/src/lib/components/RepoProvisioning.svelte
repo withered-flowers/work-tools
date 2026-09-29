@@ -20,11 +20,11 @@
   } = $props();
 
   // Global Configuration
-  let orgName = $state("FTDS-Assignment-Bay-2");
+  let orgName = $state("ORGANIZATION-NAME");
   let teamName = $state("");
   let skipSync = $state(false);
   let reviewersInput = $state("reviewer1, reviewer2");
-  let fallbackPrefix = $state("FTDS-045-HCK");
+  let fallbackPrefix = $state("BATCH-001-DEV");
   let defaultDeadline = $state("2026-12-31 23:59");
   let dryRun = $state(true);
 
@@ -32,17 +32,17 @@
   let templates = $state<TemplateEntry[]>([
     {
       key: "P0-LC1-Set-1",
-      repo: "FTDS-Assignment-Bay-2/P0-LC1-Set-1",
+      repo: "ORGANIZATION-NAME/P0-LC1-Set-1",
       deadline: "2026-12-31 23:59",
     },
     {
       key: "P0-LC2-Set-1",
-      repo: "FTDS-Assignment-Bay-2/P0-LC2-Set-1",
+      repo: "ORGANIZATION-NAME/P0-LC2-Set-1",
       deadline: "2026-12-31 23:59",
     },
     {
       key: "P0-LC3-Set-1",
-      repo: "FTDS-Assignment-Bay-2/P0-LC3-Set-1",
+      repo: "ORGANIZATION-NAME/P0-LC3-Set-1",
       deadline: "2026-12-31 23:59",
     },
   ]);
@@ -52,9 +52,9 @@
   let newTemplateDeadline = $state("2026-12-31 23:59");
 
   // User assignments input
-  let rawAssignmentsInput = $state(`user1,FTDS-045-HCK,P0-LC1-Set-1,P0-LC2-Set-1
-user2,FTDS-059-RMT,P0-LC2-Set-1
-user3,FTDS-044-HCK,P0-LC1-Set-1,P0-LC3-Set-1`);
+  let rawAssignmentsInput = $state(`user1,BATCH-045-DEV,P0-LC1-Set-1,P0-LC2-Set-1
+user2,BATCH-059-REM,P0-LC2-Set-1
+user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
 
   let parsedPlans = $state<ProvisionPlan[]>([]);
   let lastParsedInput = $state("");
@@ -165,7 +165,7 @@ user3,FTDS-044-HCK,P0-LC1-Set-1,P0-LC3-Set-1`);
   }
 
   function loadDefaultTemplates() {
-    const org = orgName.trim() || "FTDS-Assignment-Bay-2";
+    const org = orgName.trim() || "ORGANIZATION-NAME";
     templates = [
       {
         key: "P0-LC1-Set-1",
@@ -392,13 +392,15 @@ user3,FTDS-044-HCK,P0-LC1-Set-1,P0-LC3-Set-1`);
           <span>Target Organization</span>
           <span class="required-mark">*</span>
         </label>
-        <input
-          id="repo-org-input"
-          type="text"
-          bind:value={orgName}
-          placeholder="e.g. FTDS-Assignment-Bay-2"
-          class="pastel-input"
-        />
+        <div class="input-container">
+          <input
+            id="repo-org-input"
+            type="text"
+            bind:value={orgName}
+            placeholder="e.g. MY-ASSIGNMENT-ORG"
+            class="pastel-input"
+          />
+        </div>
         <span class="form-hint">Organization where student assignment repos are created</span>
       </div>
 
@@ -406,54 +408,66 @@ user3,FTDS-044-HCK,P0-LC1-Set-1,P0-LC3-Set-1`);
         <label for="repo-prefix-input" class="form-label">
           <span>Fallback Cohort Prefix</span>
         </label>
-        <input
-          id="repo-prefix-input"
-          type="text"
-          bind:value={fallbackPrefix}
-          placeholder="e.g. FTDS-045-HCK"
-          class="pastel-input"
-        />
-        <span class="form-hint">Convention format: <code>FTDS-XXX-HCK|RMT</code></span>
+        <div class="input-container">
+          <input
+            id="repo-prefix-input"
+            type="text"
+            bind:value={fallbackPrefix}
+            placeholder="e.g. BATCH-001-DEV"
+            class="pastel-input"
+          />
+        </div>
+        <span class="form-hint">Convention format: <code>BATCH-XXX-DEV|REM</code></span>
       </div>
 
       <div class="form-cell">
         <label for="repo-deadline-input" class="form-label">
           <span>Default Deadline</span>
         </label>
-        <div class="input-with-icon">
-          <Icon name="calendar" size={15} color="#6366f1" />
-          <input
-            id="repo-deadline-input"
-            type="text"
-            bind:value={defaultDeadline}
-            placeholder="YYYY-MM-DD HH:MM"
-            class="pastel-input"
-          />
+        <div class="input-container">
+          <div class="input-with-icon">
+            <Icon name="calendar" size={15} color="#6366f1" />
+            <input
+              id="repo-deadline-input"
+              type="text"
+              bind:value={defaultDeadline}
+              placeholder="YYYY-MM-DD HH:MM"
+              class="pastel-input"
+            />
+          </div>
         </div>
         <span class="form-hint">Timezone: Asia/Jakarta (UTC+07:00)</span>
       </div>
 
       <div class="form-cell">
-        <label for="repo-reviewers-input" class="form-label">Reviewers (Maintainers)</label>
-        <input
-          id="repo-reviewers-input"
-          type="text"
-          bind:value={reviewersInput}
-          placeholder="reviewer1, reviewer2"
-          class="pastel-input"
-        />
+        <label for="repo-reviewers-input" class="form-label">
+          <span>Reviewers (Maintainers)</span>
+        </label>
+        <div class="input-container">
+          <input
+            id="repo-reviewers-input"
+            type="text"
+            bind:value={reviewersInput}
+            placeholder="reviewer1, reviewer2"
+            class="pastel-input"
+          />
+        </div>
         <span class="form-hint">Assigned maintain access and added to Feedback PR</span>
       </div>
 
       <div class="form-cell">
-        <label for="repo-team-input" class="form-label">Team Sync Name (Optional)</label>
-        <input
-          id="repo-team-input"
-          type="text"
-          bind:value={teamName}
-          placeholder="e.g. FTDS-045-HCK"
-          class="pastel-input"
-        />
+        <label for="repo-team-input" class="form-label">
+          <span>Team Sync Name (Optional)</span>
+        </label>
+        <div class="input-container">
+          <input
+            id="repo-team-input"
+            type="text"
+            bind:value={teamName}
+            placeholder="e.g. BATCH-001-DEV"
+            class="pastel-input"
+          />
+        </div>
         <label class="inline-checkbox-label" for="skip-sync-toggle">
           <input
             id="skip-sync-toggle"
@@ -578,7 +592,7 @@ user3,FTDS-044-HCK,P0-LC1-Set-1,P0-LC3-Set-1`);
                   <input
                     type="text"
                     bind:value={t.repo}
-                    placeholder="e.g. FTDS-Assignment-Bay-2/P0-LC1-Set-1"
+                    placeholder="e.g. ORGANIZATION-NAME/P0-LC1-Set-1"
                     class="table-cell-input repo-cell-input"
                   />
                 </td>
@@ -628,7 +642,7 @@ user3,FTDS-044-HCK,P0-LC1-Set-1,P0-LC3-Set-1`);
           <input
             id="new-template-repo"
             type="text"
-            placeholder="e.g. FTDS-Assignment-Bay-2/P0-LC4-Set-1"
+            placeholder="e.g. ORGANIZATION-NAME/P0-LC4-Set-1"
             bind:value={newTemplateRepo}
             class="pastel-input"
           />
@@ -704,9 +718,9 @@ user3,FTDS-044-HCK,P0-LC1-Set-1,P0-LC3-Set-1`);
 # 1. username,prefix,template1,template2
 # 2. username|prefix|template1,template2
 # 3. username|prefix (assigns all templates)
-user1,FTDS-045-HCK,P0-LC1-Set-1,P0-LC2-Set-1
-user2,FTDS-059-RMT,P0-LC2-Set-1
-user3,FTDS-044-HCK,P0-LC1-Set-1,P0-LC3-Set-1`}
+user1,BATCH-045-DEV,P0-LC1-Set-1,P0-LC2-Set-1
+user2,BATCH-059-REM,P0-LC2-Set-1
+user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`}
           rows={11}
           class="pastel-textarea"
           spellcheck="false"
@@ -997,9 +1011,21 @@ user3,FTDS-044-HCK,P0-LC1-Set-1,P0-LC3-Set-1`}
 
   .config-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: 1.25rem;
     align-items: start;
+  }
+
+  @media (max-width: 960px) {
+    .config-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
+
+  @media (max-width: 640px) {
+    .config-grid {
+      grid-template-columns: 1fr;
+    }
   }
 
   .form-cell {
@@ -1013,16 +1039,24 @@ user3,FTDS-044-HCK,P0-LC1-Set-1,P0-LC3-Set-1`}
     font-weight: 600;
     color: #334155;
     display: flex;
+    align-items: center;
     gap: 0.25rem;
+    min-height: 20px;
+    margin: 0;
   }
 
   .required-mark {
     color: #e11d48;
+    line-height: 1;
   }
 
   .form-hint {
     font-size: 0.75rem;
     color: #64748b;
+    min-height: 18px;
+    line-height: 1.3;
+    display: block;
+    margin: 0;
   }
 
   .form-hint code {
@@ -1033,15 +1067,29 @@ user3,FTDS-044-HCK,P0-LC1-Set-1,P0-LC3-Set-1`}
     color: #4f46e5;
   }
 
+  .input-container {
+    width: 100%;
+    height: 42px;
+    display: flex;
+    align-items: stretch;
+  }
+
   .pastel-input {
     width: 100%;
+    height: 42px;
+    min-height: 42px;
+    max-height: 42px;
     box-sizing: border-box;
     background: #f8fafc;
     border: 1px solid #cbd5e1;
     color: #0f172a;
     border-radius: 8px;
-    padding: 0.55rem 0.8rem;
+    padding: 0 0.85rem;
     font-size: 0.85rem;
+    line-height: 40px;
+    font-family: inherit;
+    margin: 0;
+    vertical-align: middle;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
@@ -1056,6 +1104,9 @@ user3,FTDS-044-HCK,P0-LC1-Set-1,P0-LC3-Set-1`}
     position: relative;
     display: flex;
     align-items: center;
+    width: 100%;
+    height: 42px;
+    box-sizing: border-box;
   }
 
   .input-with-icon :global(.svg-icon) {
@@ -1066,6 +1117,9 @@ user3,FTDS-044-HCK,P0-LC1-Set-1,P0-LC3-Set-1`}
 
   .input-with-icon input {
     padding-left: 2.1rem;
+    height: 42px;
+    min-height: 42px;
+    max-height: 42px;
   }
 
   .inline-checkbox-label {
@@ -1075,7 +1129,9 @@ user3,FTDS-044-HCK,P0-LC1-Set-1,P0-LC3-Set-1`}
     font-size: 0.75rem;
     color: #64748b;
     cursor: pointer;
-    margin-top: 0.2rem;
+    min-height: 18px;
+    line-height: 1.3;
+    margin: 0;
   }
 
   /* Mode Switch Card */
@@ -1086,6 +1142,8 @@ user3,FTDS-044-HCK,P0-LC1-Set-1,P0-LC3-Set-1`}
     flex-direction: column;
     gap: 0.6rem;
     transition: all 0.2s ease;
+    box-sizing: border-box;
+    min-height: 88px;
   }
 
   .mode-switch-card.mode-dry-run {
@@ -1330,18 +1388,20 @@ user3,FTDS-044-HCK,P0-LC1-Set-1,P0-LC3-Set-1`}
   .btn-add-template {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
     gap: 0.4rem;
     background: #4f46e5;
     border: 1px solid #4338ca;
     color: #ffffff;
-    padding: 0.5rem 0.95rem;
-    border-radius: 7px;
+    padding: 0 1rem;
+    border-radius: 8px;
     font-size: 0.8rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     box-shadow: 0 1px 3px rgba(79, 70, 229, 0.2);
-    height: 38px;
+    height: 42px;
+    box-sizing: border-box;
   }
 
   .btn-add-template:hover:not(:disabled) {
@@ -1457,6 +1517,8 @@ user3,FTDS-044-HCK,P0-LC1-Set-1,P0-LC3-Set-1`}
     font-size: 0.825rem;
     line-height: 1.5;
     resize: vertical;
+    white-space: pre;
+    overflow-x: auto;
     transition: all 0.2s ease;
   }
 

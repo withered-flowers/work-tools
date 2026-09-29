@@ -8,9 +8,9 @@
 #        ./002_create_repos.sh --dry-run
 #
 #   2. CLI Arguments mode (single or multiple users with specific templates and prefixes):
-#        ./002_create_repos.sh -u "user1|FTDS-045-HCK" -t "P0-LC1-Set-1,P0-LC2-Set-1"
-#        ./002_create_repos.sh -u "user1,user2" -p "FTDS-059-RMT" -t "P0-LC2-Set-1"
-#        ./002_create_repos.sh -u "user1|FTDS-045-HCK,user2|FTDS-059-RMT" -t "P0-LC1-Set-1" --dry-run
+#        ./002_create_repos.sh -u "user1|BATCH-045-DEV" -t "P0-LC1-Set-1,P0-LC2-Set-1"
+#        ./002_create_repos.sh -u "user1,user2" -p "BATCH-059-REM" -t "P0-LC2-Set-1"
+#        ./002_create_repos.sh -u "user1|BATCH-045-DEV,user2|BATCH-059-REM" -t "P0-LC1-Set-1" --dry-run
 #
 #   3. File / CSV mode (username,prefix,template1,template2,...):
 #        ./002_create_repos.sh --file assignments.csv
@@ -22,7 +22,7 @@ set -uo pipefail
 # ==============================================================================
 # Global Configuration
 # ==============================================================================
-ORG_NAME="FTDS-Assignment-Bay-2"
+ORG_NAME="ORGANIZATION-NAME"
 TEAM_NAME="" # Leave empty ("") if team sync is not needed
 DEFAULT_DEADLINE="2026-12-31 23:59"
 
@@ -40,9 +40,9 @@ REVIEWERS=(
 #   3. "organization/repository|YYYY-MM-DD HH:MM|user1,user2,..." (Template-centric mapping)
 # ==============================================================================
 TEMPLATES=(
-  "FTDS-Assignment-Bay-2/P0-LC1-Set-1|2026-12-31 23:59"
-  "FTDS-Assignment-Bay-2/P0-LC2-Set-1|2026-12-31 23:59"
-  "FTDS-Assignment-Bay-2/P0-LC3-Set-1|2026-12-31 23:59"
+  "ORGANIZATION-NAME/P0-LC1-Set-1|2026-12-31 23:59"
+  "ORGANIZATION-NAME/P0-LC2-Set-1|2026-12-31 23:59"
+  "ORGANIZATION-NAME/P0-LC3-Set-1|2026-12-31 23:59"
 )
 
 # ==============================================================================
@@ -53,12 +53,12 @@ TEMPLATES=(
 #   "username||template_1,template_2,..."       -> Specific templates, fallback prefix
 #   "username"                                  -> All templates, fallback prefix
 #
-# Prefix format: FTDS-XXX-YYY (where XXX is 3 digits, YYY is "HCK" or "RMT")
+# Prefix format: BATCH-XXX-YYY (e.g. "BATCH-045-DEV" or "BATCH-059-REM")
 # ==============================================================================
 USERS=(
-  "user1|FTDS-045-HCK|P0-LC1-Set-1,P0-LC2-Set-1"
-  "user2|FTDS-059-RMT|P0-LC2-Set-1"
-  "user3|FTDS-044-HCK|P0-LC1-Set-1,P0-LC3-Set-1"
+  "user1|BATCH-045-DEV|P0-LC1-Set-1,P0-LC2-Set-1"
+  "user2|BATCH-059-REM|P0-LC2-Set-1"
+  "user3|BATCH-044-DEV|P0-LC1-Set-1,P0-LC3-Set-1"
 )
 
 # ANSI Color codes
@@ -182,7 +182,7 @@ parse_user_entry() {
     u=$(echo "$entry" | cut -d'|' -f1 | xargs)
     local f2
     f2=$(echo "$entry" | cut -d'|' -f2 | xargs)
-    if [[ "$f2" =~ ^FTDS-[0-9]{3}-(HCK|RMT)$ ]] || [[ "$f2" =~ ^FTDS- ]]; then
+    if [[ "$f2" =~ ^(BATCH|COHORT|CLASS)-[0-9]{3}-(DEV|REM)$ ]] || [[ "$f2" =~ ^[A-Za-z0-9]+-[0-9]{3}-[A-Za-z0-9]+$ ]] || [[ "$f2" =~ ^(BATCH|COHORT|CLASS)- ]]; then
       p="$f2"
       t="all"
     else
@@ -273,7 +273,7 @@ while [[ $# -gt 0 ]]; do
       echo "  -u, --username USER(S)     GitHub user(s) (format: 'user', 'user|prefix', or 'user|prefix|tpl1,tpl2')"
       echo "  -t, --templates TEMPLATES  Comma-separated templates (e.g. 'P0-LC1-Set-1,P0-LC2-Set-1')"
       echo "  -d, --deadline DEADLINE    Deadline override (format: 'YYYY-MM-DD HH:MM')"
-      echo "  -p, --prefix PREFIX        Fallback repository prefix (e.g. 'FTDS-059-RMT' or 'FTDS-045-HCK')"
+      echo "  -p, --prefix PREFIX        Fallback repository prefix (e.g. 'BATCH-059-REM' or 'BATCH-045-DEV')"
       echo "      --team TEAM_NAME       GitHub team name for grouping members"
       echo "  -r, --reviewers REVIEWERS  Comma-separated list of reviewers (e.g. 'rev1,rev2')"
       echo "  -o, --org ORG_NAME         GitHub organization name override"
@@ -368,7 +368,7 @@ elif [ -n "$INPUT_FILE" ]; then
     elif [[ "$line" == *","* ]]; then
       f1=$(echo "$line" | cut -d',' -f1 | xargs)
       f2=$(echo "$line" | cut -d',' -f2 | xargs)
-      if [[ "$f2" =~ ^FTDS-[0-9]{3}-(HCK|RMT)$ ]] || [[ "$f2" =~ ^FTDS- ]]; then
+      if [[ "$f2" =~ ^(BATCH|COHORT|CLASS)-[0-9]{3}-(DEV|REM)$ ]] || [[ "$f2" =~ ^[A-Za-z0-9]+-[0-9]{3}-[A-Za-z0-9]+$ ]] || [[ "$f2" =~ ^(BATCH|COHORT|CLASS)- ]]; then
         csv_pref="$f2"
         csv_tpls=$(echo "$line" | cut -d',' -f3- | xargs)
       else
@@ -565,8 +565,8 @@ for entry in "${TARGET_ASSIGNMENTS[@]}"; do
   echo -e "${BOLD}${CYAN}-----------------------------------------------------${NC}"
 
   # Validate prefix convention if prefix is provided
-  if [ -n "$USER_PREFIX" ] && ! [[ "$USER_PREFIX" =~ ^FTDS-[0-9]{3}-(HCK|RMT)$ ]]; then
-    echo -e "  ${YELLOW}Notice: Prefix '${USER_PREFIX}' does not follow 'FTDS-XXX-HCK|RMT' format.${NC}"
+  if [ -n "$USER_PREFIX" ] && ! [[ "$USER_PREFIX" =~ ^[A-Za-z0-9]+-[0-9]{3}-[A-Za-z0-9]+$ ]] && ! [[ "$USER_PREFIX" =~ ^(BATCH|COHORT|CLASS)- ]]; then
+    echo -e "  ${YELLOW}Notice: Prefix '${USER_PREFIX}' does not follow 'PREFIX-XXX-TAG' (e.g. BATCH-001-DEV) format.${NC}"
   fi
 
   IFS="," read -r -a USER_TEMPLATES_ARRAY <<< "$TEMPLATES_RAW"

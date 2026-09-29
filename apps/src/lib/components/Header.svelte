@@ -86,7 +86,6 @@
       <div class="brand-meta">
         <div class="brand-title-row">
           <span class="brand-title">GitHub Automation Studio</span>
-          <span class="brand-badge">PASTEL LIGHT</span>
         </div>
         <span class="brand-subtitle">Team Invitations & Repository Provisioning Orchestrator</span>
       </div>
@@ -233,17 +232,6 @@
     letter-spacing: -0.02em;
   }
 
-  .brand-badge {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.65rem;
-    font-weight: 700;
-    padding: 0.15rem 0.45rem;
-    background: #ecfdf5;
-    color: #059669;
-    border: 1px solid #a7f3d0;
-    border-radius: 4px;
-    letter-spacing: 0.04em;
-  }
 
   .brand-subtitle {
     font-size: 0.775rem;

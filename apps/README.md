@@ -31,7 +31,7 @@ A native cross-platform desktop application built with **Tauri v2**, **SvelteKit
 - Real-time progress bar, live event logging, and status badges (`[ACTIVE MEMBER]`, `[INVITATION SENT]`, `[DRY-RUN]`, `[FAILED]`).
 
 ### 3. Repository Provisioning (`002_create_repos.sh`)
-- Organization name, fallback cohort prefix (convention: `FTDS-XXX-HCK|RMT`), default deadline, and reviewer usernames.
+- Organization name, fallback cohort prefix (convention: `BATCH-XXX-DEV|REM`), default deadline, and reviewer usernames.
 - Optional closed team creation and org membership invitation synchronization.
 - Dynamic Template Catalog manager (add, remove, and configure individual template repositories & deadlines).
 - "Load Default Templates" preset button (`P0-LC1-Set-1`, `P0-LC2-Set-1`, `P0-LC3-Set-1`).
@@ -41,7 +41,7 @@ A native cross-platform desktop application built with **Tauri v2**, **SvelteKit
   - `username|prefix`
   - Template-centric: `template|deadline|user1,user2`
 - "Load Sample CSV" button for `002_xdummy_assignments.csv`.
-- Pre-flight matrix preview table detailing exact target repo names (e.g. `P0-LC1-Set-1-FTDS-045-HCK-user1`) and ISO 8601 deadline timestamps.
+- Pre-flight matrix preview table detailing exact target repo names (e.g. `P0-LC1-Set-1-BATCH-045-DEV-user1`) and ISO 8601 deadline timestamps.
 - Native multi-step repository pipeline:
   1. Generate private repository from template (`POST /repos/{template}/generate`)
   2. Wait for repository initialization

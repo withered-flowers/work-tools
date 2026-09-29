@@ -685,8 +685,8 @@ pub async fn run_repo_provisioning(
     })
 }
 
-const SAMPLE_USERS_FALLBACK: &str = include_str!("../../../001_xdummy_users.csv");
-const SAMPLE_ASSIGNMENTS_FALLBACK: &str = include_str!("../../../002_xdummy_assignments.csv");
+const SAMPLE_USERS_FALLBACK: &str = include_str!("../../../scripts/001_xdummy_users.csv");
+const SAMPLE_ASSIGNMENTS_FALLBACK: &str = include_str!("../../../scripts/002_xdummy_assignments.csv");
 
 /// Reads sample files from disk if available, or falls back to embedded sample data
 #[tauri::command]
@@ -694,10 +694,12 @@ pub fn load_sample_file(sample_type: String) -> Result<String, String> {
     match sample_type.as_str() {
         "team_invitations" => {
             let candidates = [
+                "scripts/001_xdummy_users.csv",
+                "../scripts/001_xdummy_users.csv",
+                "../../scripts/001_xdummy_users.csv",
+                "../../../scripts/001_xdummy_users.csv",
                 "001_xdummy_users.csv",
                 "../001_xdummy_users.csv",
-                "../../001_xdummy_users.csv",
-                "../../../001_xdummy_users.csv",
             ];
             for path in candidates {
                 if let Ok(content) = std::fs::read_to_string(path) {
@@ -710,10 +712,12 @@ pub fn load_sample_file(sample_type: String) -> Result<String, String> {
         }
         "repo_assignments" => {
             let candidates = [
+                "scripts/002_xdummy_assignments.csv",
+                "../scripts/002_xdummy_assignments.csv",
+                "../../scripts/002_xdummy_assignments.csv",
+                "../../../scripts/002_xdummy_assignments.csv",
                 "002_xdummy_assignments.csv",
                 "../002_xdummy_assignments.csv",
-                "../../002_xdummy_assignments.csv",
-                "../../../002_xdummy_assignments.csv",
             ];
             for path in candidates {
                 if let Ok(content) = std::fs::read_to_string(path) {
@@ -740,6 +744,6 @@ mod tests {
 
         let repo_sample = load_sample_file("repo_assignments".to_string()).expect("Should load repo assignments sample");
         assert!(repo_sample.contains("user1"));
-        assert!(repo_sample.contains("FTDS-045-HCK"));
+        assert!(repo_sample.contains("BATCH-045-DEV"));
     }
 }

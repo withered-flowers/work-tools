@@ -85,15 +85,17 @@
     </div>
   </nav>
 
-  <!-- Main View Area -->
+  <!-- Main View Area (Preserves tab state and progress when switching workflows) -->
   <main class="main-content-viewport">
-    {#if activeTab === "team-invites"}
+    <div class="tab-pane" class:active-pane={activeTab === "team-invites"}>
       <TeamInvites {token} onLog={addLog} />
-    {:else if activeTab === "repo-provision"}
+    </div>
+    <div class="tab-pane" class:active-pane={activeTab === "repo-provision"}>
       <RepoProvisioning {token} onLog={addLog} />
-    {:else if activeTab === "logs"}
+    </div>
+    <div class="tab-pane" class:active-pane={activeTab === "logs"}>
       <ConsoleLogs {logs} onClear={clearLogs} />
-    {/if}
+    </div>
   </main>
 </div>
 
@@ -258,5 +260,14 @@
     max-width: 1400px;
     width: 100%;
     margin: 0 auto;
+  }
+
+  .tab-pane {
+    display: none;
+    width: 100%;
+  }
+
+  .tab-pane.active-pane {
+    display: block;
   }
 </style>

@@ -1,6 +1,7 @@
 # Format: username,team1,team2,...
 # Lines starting with '#' and blank lines are ignored.
-# Team names can be display names (e.g. "Phase 1 - Set 1") or slugs (e.g. "phase-1-set-1").
+# Team names can be display names (e.g. "Phase 1 - Set 1")
+# or normalized slugs (e.g. "phase-1-set-1").
 #
 # Examples:
 octocat,Phase 1 - Set 1
