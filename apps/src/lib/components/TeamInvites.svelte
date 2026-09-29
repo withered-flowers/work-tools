@@ -14,14 +14,23 @@
     onLog?: (level: "info" | "success" | "warn" | "error", message: string) => void;
   } = $props();
 
+  interface InvitationRow {
+    username: string;
+    teams: string;
+  }
+
   let orgName = $state("");
   let role = $state<"member" | "maintainer">("member");
   let dryRun = $state(true);
-  let rawInput = $state("");
+
+  let invitations = $state<InvitationRow[]>([]);
+  let newInviteUser = $state("");
+  let newInviteTeams = $state("");
 
   let parsedEntries = $state<TeamInvitationEntry[]>([]);
-  let lastParsedInput = $state("");
-  let hasUnparsedChanges = $derived(rawInput.trim() !== lastParsedInput.trim());
+  let lastParsedSnapshot = $state("");
+  let currentSnapshot = $derived(JSON.stringify(invitations));
+  let hasUnparsedChanges = $derived(currentSnapshot !== lastParsedSnapshot);
   let isParsing = $state(false);
   let isRunning = $state(false);
 
@@ -63,20 +72,49 @@
     }
   });
 
+  function getRawInvitationText(): string {
+    return invitations
+      .filter((i) => i.username.trim())
+      .map((i) => {
+        const u = i.username.trim();
+        const t = i.teams.trim();
+        return t ? `${u},${t}` : u;
+      })
+      .join("\n");
+  }
+
   async function updatePreview() {
     isParsing = true;
     try {
+      const inputText = getRawInvitationText();
       const res: TeamInvitationEntry[] = await invoke("preview_team_invitations", {
-        inputText: rawInput,
+        inputText,
       });
       parsedEntries = res;
-      lastParsedInput = rawInput;
+      lastParsedSnapshot = JSON.stringify(invitations);
     } catch (e: any) {
       console.error("Preview error:", e);
       onLog("error", `Parsing error: ${e}`);
     } finally {
       isParsing = false;
     }
+  }
+
+  function addInvitation() {
+    if (!newInviteUser.trim()) return;
+    invitations = [
+      ...invitations,
+      {
+        username: newInviteUser.trim(),
+        teams: newInviteTeams.trim(),
+      },
+    ];
+    newInviteUser = "";
+    newInviteTeams = "";
+  }
+
+  function removeInvitation(index: number) {
+    invitations = invitations.filter((_, i) => i !== index);
   }
 
   function handleYamlImport(event: Event) {
@@ -108,34 +146,40 @@
 
           // 3. Invitation List
           const rawInvites = parsed.invitations || parsed.invitation_list || parsed.users || parsed.members;
-          let lines: string[] = [];
+          let rows: InvitationRow[] = [];
 
           if (Array.isArray(rawInvites)) {
             for (const item of rawInvites) {
               if (typeof item === "string") {
-                if (item.trim()) lines.push(item.trim());
+                const parts = item.split(",").map((p) => p.trim());
+                if (parts[0]) {
+                  rows.push({ username: parts[0], teams: parts.slice(1).join(", ") });
+                }
               } else if (item && typeof item === "object") {
                 const user = item.user || item.username || item.github_user || item.name || "";
                 const teams = item.teams || item.team_list || item.team || [];
-                const teamList = Array.isArray(teams) ? teams.join(",") : String(teams);
+                const teamList = Array.isArray(teams) ? teams.join(", ") : String(teams);
                 if (user) {
-                  lines.push(teamList ? `${user},${teamList}` : user);
+                  rows.push({ username: String(user).trim(), teams: teamList.trim() });
                 }
               }
             }
           } else if (rawInvites && typeof rawInvites === "object") {
             for (const [user, teams] of Object.entries(rawInvites)) {
-              const teamList = Array.isArray(teams) ? teams.join(",") : String(teams);
-              lines.push(teamList ? `${user},${teamList}` : user);
+              const teamList = Array.isArray(teams) ? (teams as any[]).join(", ") : String(teams);
+              rows.push({ username: user.trim(), teams: teamList.trim() });
             }
           } else if (typeof rawInvites === "string") {
-            lines = rawInvites.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+            const lines = rawInvites.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+            for (const line of lines) {
+              const parts = line.split(",").map((p) => p.trim());
+              if (parts[0]) {
+                rows.push({ username: parts[0], teams: parts.slice(1).join(", ") });
+              }
+            }
           }
 
-          if (lines.length > 0) {
-            rawInput = lines.join("\n");
-          }
-
+          invitations = rows;
           await updatePreview();
           onLog(
             "success",
@@ -154,31 +198,20 @@
   }
 
   function exportYamlFile() {
-    const inviteItems: Array<{ user: string; teams: string[] }> = [];
-    for (const entry of parsedEntries) {
-      inviteItems.push({
-        user: entry.username,
-        teams: entry.teams.map((t) => t.display_name || t.slug),
-      });
-    }
+    const inviteItems = invitations
+      .filter((i) => i.username.trim())
+      .map((i) => ({
+        user: i.username.trim(),
+        teams: i.teams
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean),
+      }));
 
     const doc = {
       organization: orgName.trim() || "sample-org",
       role,
-      invitations:
-        inviteItems.length > 0
-          ? inviteItems
-          : rawInput
-              .split(/\r?\n/)
-              .map((l) => l.trim())
-              .filter(Boolean)
-              .map((line) => {
-                const parts = line.split(",").map((p) => p.trim());
-                return {
-                  user: parts[0] || "",
-                  teams: parts.slice(1).filter(Boolean),
-                };
-              }),
+      invitations: inviteItems,
     };
 
     const yamlStr = jsyaml.dump(doc, { indent: 2, lineWidth: -1 });
@@ -196,12 +229,13 @@
   }
 
   function clearAll() {
-    rawInput = "";
-    lastParsedInput = "";
+    invitations = [];
+    lastParsedSnapshot = "";
     parsedEntries = [];
     currentProgress = null;
     summary = null;
     executionResults = [];
+    onLog("info", "Cleared all invitations.");
   }
 
   async function runInvitations() {
@@ -282,7 +316,7 @@
             type="button"
             class="action-btn"
             onclick={exportYamlFile}
-            disabled={!orgName && !rawInput}
+            disabled={!orgName && invitations.length === 0}
             title="Export Team Invitations configuration as YAML file"
           >
             <Icon name="download" size={14} color="#4f46e5" />
@@ -358,43 +392,118 @@
     </div>
   </section>
 
-  <!-- Dual Workspace: Input & Preview -->
+  <!-- Stacked Workspace: Input on top, Preview below -->
   <div class="split-workspace">
     <!-- Input Workspace -->
     <section class="pastel-card input-panel">
       <div class="panel-header">
         <div class="panel-title-group">
-          <Icon name="file" size={16} color="#4f46e5" />
+          <Icon name="users" size={16} color="#4f46e5" />
           <h3>1. Invitation List Input</h3>
+          <span class="count-tag">{invitations.length} users</span>
         </div>
         <div class="panel-actions">
-          <button type="button" class="action-btn btn-danger-ghost" onclick={clearAll} title="Clear text input">
+          <button type="button" class="action-btn btn-danger-ghost" onclick={clearAll} title="Clear all invitations">
             <Icon name="trash" size={14} color="#e11d48" />
             <span>Clear</span>
           </button>
         </div>
       </div>
 
-      <div class="editor-container">
-        <label for="invitations-raw-editor" class="visually-hidden">Invitations Raw Input</label>
-        <textarea
-          id="invitations-raw-editor"
-          bind:value={rawInput}
-          placeholder={`# Enter invitations below or use "Import YAML" in the top card.
-# Format: username,team1,team2,...
-# Example:
-# alice,Frontend,Engineering
-# bob,Backend,Platform`}
-          rows={11}
-          class="pastel-textarea"
-          spellcheck="false"
-        ></textarea>
+      <!-- Invitations Table -->
+      <div class="catalog-table-wrapper">
+        {#if invitations.length === 0}
+          <div class="empty-state-box catalog-empty">
+            <Icon name="users" size={28} color="#94a3b8" />
+            <p class="empty-text">No invitations in list. Add a user below or import a YAML configuration.</p>
+          </div>
+        {:else}
+          <table class="pro-table catalog-table">
+            <thead>
+              <tr>
+                <th class="th-index">#</th>
+                <th style="width: 260px;">GitHub Username</th>
+                <th>Target Teams (comma-separated)</th>
+                <th style="width: 60px; text-align: center;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each invitations as item, i}
+                <tr>
+                  <td class="td-index">{i + 1}</td>
+                  <td>
+                    <input
+                      type="text"
+                      bind:value={item.username}
+                      placeholder="e.g. octocat"
+                      class="table-cell-input user-cell-input"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      bind:value={item.teams}
+                      placeholder="e.g. Core Engineering, Platform Team"
+                      class="table-cell-input"
+                    />
+                  </td>
+                  <td style="text-align: center;">
+                    <button
+                      type="button"
+                      class="btn-icon-danger"
+                      onclick={() => removeInvitation(i)}
+                      title="Remove invitation"
+                      aria-label="Remove invitation"
+                    >
+                      <Icon name="trash" size={13} color="#e11d48" />
+                    </button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        {/if}
       </div>
 
-      <div class="panel-footer">
+      <!-- Inline Add Invitation Form -->
+      <div class="add-template-bar">
+        <div class="add-bar-fields">
+          <div class="add-field-group" style="flex: 1; min-width: 180px;">
+            <label for="new-invite-user" class="add-field-label">GitHub Username</label>
+            <input
+              id="new-invite-user"
+              type="text"
+              placeholder="e.g. octocat"
+              bind:value={newInviteUser}
+              class="pastel-input"
+            />
+          </div>
+          <div class="add-field-group" style="flex: 2; min-width: 250px;">
+            <label for="new-invite-teams" class="add-field-label">Target Teams (comma-separated)</label>
+            <input
+              id="new-invite-teams"
+              type="text"
+              placeholder="e.g. Core Engineering, Platform Team"
+              bind:value={newInviteTeams}
+              class="pastel-input"
+            />
+          </div>
+        </div>
+        <button
+          type="button"
+          class="btn-add-template"
+          onclick={addInvitation}
+          disabled={!newInviteUser.trim()}
+        >
+          <Icon name="plus" size={14} />
+          <span>Add Invitation</span>
+        </button>
+      </div>
+
+      <div class="panel-footer" style="margin-top: 0.85rem;">
         <div class="syntax-guide-wrap">
           <span class="syntax-guide">
-            Syntax: <code>username,team1,team2</code> or import a Team Invitations <code>.yaml</code> file.
+            Add username and comma-separated target teams, or import a Team Invitations <code>.yaml</code> file.
           </span>
           {#if hasUnparsedChanges}
             <span class="unparsed-indicator">
@@ -426,7 +535,7 @@
           <Icon name="check-circle" size={16} color="#059669" />
           <h3>2. Pre-Flight Preview</h3>
           {#if hasUnparsedChanges}
-            <span class="preview-stale-tag" title="Click Re-parse to preview latest text input">
+            <span class="preview-stale-tag" title="Click Re-parse to preview latest table data">
               Unparsed Changes
             </span>
           {/if}
@@ -447,7 +556,7 @@
         {#if parsedEntries.length === 0}
           <div class="empty-state-box">
             <Icon name="file" size={32} color="#94a3b8" />
-            <p class="empty-text">No invitation entries detected. Enter usernames and teams above or upload a CSV file.</p>
+            <p class="empty-text">No invitation entries detected. Add usernames and teams above or import a YAML configuration.</p>
           </div>
         {:else}
           <table class="pro-table">
@@ -853,17 +962,185 @@
     font-weight: 500;
   }
 
-  /* Split Workspace */
+  /* Stacked Workspace: Input on top, Preview below */
   .split-workspace {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 1.5rem;
   }
 
-  @media (max-width: 960px) {
-    .split-workspace {
-      grid-template-columns: 1fr;
-    }
+  .count-tag {
+    font-size: 0.7rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 700;
+    color: #4f46e5;
+    background: #eef2ff;
+    border: 1px solid #c7d2fe;
+    padding: 0.15rem 0.5rem;
+    border-radius: 9999px;
+  }
+
+  .catalog-table-wrapper {
+    max-height: 380px;
+    overflow-y: auto;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background: #ffffff;
+    margin-bottom: 0.85rem;
+  }
+
+  .catalog-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  .catalog-table th {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.725rem;
+    font-weight: 700;
+    color: #475569;
+    background: #f8fafc;
+    padding: 0.55rem 0.75rem;
+    border-bottom: 1px solid #e2e8f0;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+  }
+
+  .catalog-table td {
+    padding: 0.4rem 0.6rem;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+  }
+
+  .catalog-table tr:hover {
+    background: #fbfcfe;
+  }
+
+  .catalog-empty {
+    padding: 2.2rem 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+  }
+
+  .empty-text {
+    font-size: 0.825rem;
+    color: #64748b;
+    margin: 0;
+  }
+
+  .table-cell-input {
+    width: 100%;
+    box-sizing: border-box;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.8rem;
+    color: #0f172a;
+    font-family: 'JetBrains Mono', monospace;
+    transition: all 0.15s ease;
+  }
+
+  .table-cell-input:hover {
+    border-color: #cbd5e1;
+    background: #ffffff;
+  }
+
+  .table-cell-input:focus {
+    outline: none;
+    background: #ffffff;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
+  }
+
+  .user-cell-input {
+    font-weight: 600;
+    color: #1e293b;
+  }
+
+  .btn-icon-danger {
+    background: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 6px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+  }
+
+  .btn-icon-danger:hover {
+    background: #fff1f2;
+    border-color: #fecdd3;
+  }
+
+  /* Inline Add Bar */
+  .add-template-bar {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.85rem;
+    background: #f8fafc;
+    padding: 0.85rem 1rem;
+    border-radius: 8px;
+    border: 1px solid #e2e8f0;
+    flex-wrap: wrap;
+  }
+
+  .add-bar-fields {
+    display: flex;
+    gap: 0.75rem;
+    flex: 1;
+    min-width: 300px;
+    flex-wrap: wrap;
+  }
+
+  .add-field-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+  }
+
+  .add-field-label {
+    font-size: 0.725rem;
+    font-weight: 600;
+    color: #475569;
+  }
+
+  .btn-add-template {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    background: #4f46e5;
+    border: 1px solid #4338ca;
+    color: #ffffff;
+    padding: 0 1rem;
+    border-radius: 8px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    box-shadow: 0 1px 3px rgba(79, 70, 229, 0.2);
+    height: 42px;
+    box-sizing: border-box;
+  }
+
+  .btn-add-template:hover:not(:disabled) {
+    background: #4338ca;
+    box-shadow: 0 2px 6px rgba(79, 70, 229, 0.35);
+  }
+
+  .btn-add-template:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    background: #94a3b8;
+    border-color: #cbd5e1;
+    box-shadow: none;
   }
 
   .panel-header {
@@ -937,33 +1214,7 @@
     border-color: #fecdd3;
   }
 
-  .editor-container {
-    margin-bottom: 0.65rem;
-  }
 
-  .pastel-textarea {
-    width: 100%;
-    box-sizing: border-box;
-    background: #f8fafc;
-    border: 1px solid #cbd5e1;
-    color: #0f172a;
-    border-radius: 8px;
-    padding: 0.75rem;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.825rem;
-    line-height: 1.5;
-    resize: vertical;
-    white-space: pre;
-    overflow-x: auto;
-    transition: all 0.2s ease;
-  }
-
-  .pastel-textarea:focus {
-    outline: none;
-    border-color: #6366f1;
-    background: #ffffff;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
-  }
 
   .panel-footer {
     display: flex;
@@ -1396,15 +1647,4 @@
     to { transform: rotate(360deg); }
   }
 
-  .visually-hidden {
-    position: absolute;
-    clip-path: inset(50%);
-    overflow: hidden;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    border: 0;
-    white-space: nowrap;
-  }
 </style>

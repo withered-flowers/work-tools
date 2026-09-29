@@ -45,17 +45,29 @@
   let newTemplateKey = $state("");
   let newTemplateDeadline = $state("2026-12-31T23:59");
 
+  interface AssignmentRow {
+    user: string;
+    prefix: string;
+    templates: string;
+  }
+
   // User assignments input
-  let rawAssignmentsInput = $state("");
+  let assignments = $state<AssignmentRow[]>([]);
+  let newAssignUser = $state("");
+  let newAssignPrefix = $state("");
+  let newAssignTemplates = $state("");
 
   let parsedPlans = $state<ProvisionPlan[]>([]);
-  let lastParsedInput = $state("");
+  let lastParsedAssignmentsSnapshot = $state("");
   let lastParsedTemplatesJson = $state("");
   let lastParsedOrg = $state("");
 
+  let currentAssignmentsSnapshot = $derived(JSON.stringify(assignments));
+  let currentTemplatesSnapshot = $derived(JSON.stringify(templates));
+
   let hasUnparsedChanges = $derived(
-    rawAssignmentsInput.trim() !== lastParsedInput.trim() ||
-    JSON.stringify(templates) !== lastParsedTemplatesJson ||
+    currentAssignmentsSnapshot !== lastParsedAssignmentsSnapshot ||
+    currentTemplatesSnapshot !== lastParsedTemplatesJson ||
     orgName.trim() !== lastParsedOrg.trim()
   );
 
@@ -103,16 +115,29 @@
     }
   });
 
+  function getRawAssignmentsText(): string {
+    return assignments
+      .filter((a) => a.user.trim())
+      .map((a) => {
+        const u = a.user.trim();
+        const p = a.prefix.trim();
+        const t = a.templates.trim();
+        return p ? `${u},${p},${t}` : `${u},${t}`;
+      })
+      .join("\n");
+  }
+
   async function updatePreview() {
     isParsing = true;
     try {
+      const inputText = getRawAssignmentsText();
       const plans: ProvisionPlan[] = await invoke("preview_repo_provisioning", {
-        inputText: rawAssignmentsInput,
+        inputText,
         catalog: templates,
         orgName,
       });
       parsedPlans = plans;
-      lastParsedInput = rawAssignmentsInput;
+      lastParsedAssignmentsSnapshot = JSON.stringify(assignments);
       lastParsedTemplatesJson = JSON.stringify(templates);
       lastParsedOrg = orgName;
     } catch (e: any) {
@@ -121,6 +146,25 @@
     } finally {
       isParsing = false;
     }
+  }
+
+  function addAssignment() {
+    if (!newAssignUser.trim()) return;
+    assignments = [
+      ...assignments,
+      {
+        user: newAssignUser.trim(),
+        prefix: newAssignPrefix.trim(),
+        templates: newAssignTemplates.trim(),
+      },
+    ];
+    newAssignUser = "";
+    newAssignPrefix = "";
+    newAssignTemplates = "";
+  }
+
+  function removeAssignment(index: number) {
+    assignments = assignments.filter((_, i) => i !== index);
   }
 
   function addTemplate() {
@@ -198,33 +242,47 @@
             parsed.assignments ||
             parsed.user_assignments ||
             parsed.user_assignments_inputs;
-          let assignmentLines: string[] = [];
+          let assignmentRows: AssignmentRow[] = [];
           if (Array.isArray(rawAssignments)) {
             for (const item of rawAssignments) {
               if (typeof item === "string") {
-                if (item.trim()) assignmentLines.push(item.trim());
+                const parts = item.split(",").map((p) => p.trim());
+                if (parts.length >= 3) {
+                  assignmentRows.push({ user: parts[0], prefix: parts[1], templates: parts.slice(2).join(", ") });
+                } else if (parts.length === 2) {
+                  assignmentRows.push({ user: parts[0], prefix: "", templates: parts[1] });
+                } else if (parts.length === 1 && parts[0]) {
+                  assignmentRows.push({ user: parts[0], prefix: "", templates: "" });
+                }
               } else if (item && typeof item === "object") {
                 const user = item.user || item.username || item.student || "";
                 const prefix = item.prefix || item.cohort || item.batch || "";
                 const tmpls = item.templates || item.template_list || item.template || [];
-                const tmplStr = Array.isArray(tmpls) ? tmpls.join(",") : String(tmpls);
+                const tmplStr = Array.isArray(tmpls) ? tmpls.join(", ") : String(tmpls);
                 if (user) {
-                  if (prefix) {
-                    assignmentLines.push(`${user},${prefix},${tmplStr}`);
-                  } else {
-                    assignmentLines.push(`${user},${tmplStr}`);
-                  }
+                  assignmentRows.push({
+                    user: String(user).trim(),
+                    prefix: String(prefix).trim(),
+                    templates: tmplStr.trim(),
+                  });
                 }
               }
             }
           } else if (typeof rawAssignments === "string") {
-            assignmentLines = rawAssignments.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+            const lines = rawAssignments.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+            for (const line of lines) {
+              const parts = line.split(",").map((p) => p.trim());
+              if (parts.length >= 3) {
+                assignmentRows.push({ user: parts[0], prefix: parts[1], templates: parts.slice(2).join(", ") });
+              } else if (parts.length === 2) {
+                assignmentRows.push({ user: parts[0], prefix: "", templates: parts[1] });
+              } else if (parts.length === 1 && parts[0]) {
+                assignmentRows.push({ user: parts[0], prefix: "", templates: "" });
+              }
+            }
           }
 
-          if (assignmentLines.length > 0) {
-            rawAssignmentsInput = assignmentLines.join("\n");
-          }
-
+          assignments = assignmentRows;
           await updatePreview();
           onLog(
             "success",
@@ -254,47 +312,26 @@
       deadline: t.deadline,
     }));
 
-    // Group parsed plans by user and prefix for clean YAML formatting
-    const assignmentObjects = parsedPlans.reduce<
-      Array<{ user: string; prefix?: string; templates: string[] }>
-    >((acc, plan) => {
-      let existing = acc.find(
-        (a) => a.user === plan.username && a.prefix === (plan.prefix || undefined)
-      );
-      if (!existing) {
-        existing = {
-          user: plan.username,
-          ...(plan.prefix ? { prefix: plan.prefix } : {}),
-          templates: [],
-        };
-        acc.push(existing);
-      }
-      if (!existing.templates.includes(plan.template_repo)) {
-        existing.templates.push(plan.template_repo);
-      }
-      return acc;
-    }, []);
+    const assignmentObjects = assignments
+      .filter((a) => a.user.trim())
+      .map((a) => {
+        const tmpls = a.templates
+          .split(",")
+          .map((t) => t.trim())
+          .filter(Boolean);
+        const obj: any = { user: a.user.trim() };
+        if (a.prefix.trim()) {
+          obj.prefix = a.prefix.trim();
+        }
+        obj.templates = tmpls;
+        return obj;
+      });
 
     const doc: any = {
       organization: orgName.trim() || "sample-org",
       maintainers: maintainersList,
       template_catalog: catalogList,
-      assignments:
-        assignmentObjects.length > 0
-          ? assignmentObjects
-          : rawAssignmentsInput
-              .split(/\r?\n/)
-              .map((l) => l.trim())
-              .filter(Boolean)
-              .map((line) => {
-                const parts = line.split(",").map((p) => p.trim());
-                if (parts.length >= 3) {
-                  return { user: parts[0], prefix: parts[1], templates: parts.slice(2) };
-                } else if (parts.length === 2) {
-                  return { user: parts[0], templates: [parts[1]] };
-                }
-                return { user: parts[0] || "", templates: [] };
-              }),
+      assignments: assignmentObjects,
     };
 
     const yamlStr = jsyaml.dump(doc, { indent: 2, lineWidth: -1 });
@@ -315,8 +352,8 @@
     orgName = "";
     reviewersInput = "";
     templates = [];
-    rawAssignmentsInput = "";
-    lastParsedInput = "";
+    assignments = [];
+    lastParsedAssignmentsSnapshot = "";
     parsedPlans = [];
     currentProgress = null;
     summary = null;
@@ -325,12 +362,13 @@
   }
 
   function clearAssignments() {
-    rawAssignmentsInput = "";
-    lastParsedInput = "";
+    assignments = [];
+    lastParsedAssignmentsSnapshot = "";
     parsedPlans = [];
     currentProgress = null;
     summary = null;
     executionResults = [];
+    onLog("info", "Cleared all user assignments.");
   }
 
   async function runProvisioning() {
@@ -418,7 +456,7 @@
             type="button"
             class="action-btn"
             onclick={exportProvisioningYamlFile}
-            disabled={!orgName && templates.length === 0 && !rawAssignmentsInput}
+            disabled={!orgName && templates.length === 0 && assignments.length === 0}
             title="Export complete Repository Provisioning configuration as YAML file"
           >
             <Icon name="download" size={14} color="#4f46e5" />
@@ -635,7 +673,7 @@
     </div>
   </section>
 
-  <!-- Dual Workspace: Assignments Input & Pre-Flight Plan -->
+  <!-- Stacked Workspace: Input on top, Matrix below -->
   <div class="split-workspace">
     <!-- Input Workspace -->
     <section class="pastel-card input-panel">
@@ -643,34 +681,129 @@
         <div class="panel-title-group">
           <Icon name="file" size={16} color="#4f46e5" />
           <h3>2. User Assignments Input</h3>
+          <span class="count-tag">{assignments.length} assignments</span>
         </div>
         <div class="panel-actions">
-          <button type="button" class="action-btn btn-danger-ghost" onclick={clearAssignments} title="Clear text input">
+          <button type="button" class="action-btn btn-danger-ghost" onclick={clearAssignments} title="Clear all assignments">
             <Icon name="trash" size={14} color="#e11d48" />
             <span>Clear</span>
           </button>
         </div>
       </div>
 
-      <div class="editor-container">
-        <label for="assignments-raw-editor" class="visually-hidden">Assignments Raw Input</label>
-        <textarea
-          id="assignments-raw-editor"
-          bind:value={rawAssignmentsInput}
-          placeholder={`# Format options:
-# 1. username,prefix,template1,template2
-# 2. username|prefix|template1,template2
-# Or use "Import YAML" in the top card to load a provisioning YAML file.`}
-          rows={11}
-          class="pastel-textarea"
-          spellcheck="false"
-        ></textarea>
+      <!-- Assignments Table -->
+      <div class="catalog-table-wrapper">
+        {#if assignments.length === 0}
+          <div class="empty-state-box catalog-empty">
+            <Icon name="file" size={28} color="#94a3b8" />
+            <p class="empty-text">No assignments in list. Add an assignment below or import a YAML configuration.</p>
+          </div>
+        {:else}
+          <table class="pro-table catalog-table">
+            <thead>
+              <tr>
+                <th class="th-index">#</th>
+                <th style="width: 220px;">Student / Username</th>
+                <th style="width: 180px;">Prefix / Cohort</th>
+                <th>Assigned Templates (comma-separated keys)</th>
+                <th style="width: 60px; text-align: center;">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each assignments as item, i}
+                <tr>
+                  <td class="td-index">{i + 1}</td>
+                  <td>
+                    <input
+                      type="text"
+                      bind:value={item.user}
+                      placeholder="e.g. student-alice"
+                      class="table-cell-input user-cell-input"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      bind:value={item.prefix}
+                      placeholder="e.g. BATCH-01-DEV"
+                      class="table-cell-input"
+                    />
+                  </td>
+                  <td>
+                    <input
+                      type="text"
+                      bind:value={item.templates}
+                      placeholder="e.g. Web-Frontend, Backend-API"
+                      class="table-cell-input"
+                    />
+                  </td>
+                  <td style="text-align: center;">
+                    <button
+                      type="button"
+                      class="btn-icon-danger"
+                      onclick={() => removeAssignment(i)}
+                      title="Remove assignment"
+                      aria-label="Remove assignment"
+                    >
+                      <Icon name="trash" size={13} color="#e11d48" />
+                    </button>
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
+        {/if}
       </div>
 
-      <div class="panel-footer">
+      <!-- Inline Add Assignment Form -->
+      <div class="add-template-bar">
+        <div class="add-bar-fields">
+          <div class="add-field-group" style="flex: 1.2; min-width: 170px;">
+            <label for="new-assign-user" class="add-field-label">Student / Username</label>
+            <input
+              id="new-assign-user"
+              type="text"
+              placeholder="e.g. student-alice"
+              bind:value={newAssignUser}
+              class="pastel-input"
+            />
+          </div>
+          <div class="add-field-group" style="flex: 1; min-width: 140px;">
+            <label for="new-assign-prefix" class="add-field-label">Prefix / Cohort (Optional)</label>
+            <input
+              id="new-assign-prefix"
+              type="text"
+              placeholder="e.g. BATCH-01-DEV"
+              bind:value={newAssignPrefix}
+              class="pastel-input"
+            />
+          </div>
+          <div class="add-field-group" style="flex: 2; min-width: 230px;">
+            <label for="new-assign-templates" class="add-field-label">Templates (comma-separated keys)</label>
+            <input
+              id="new-assign-templates"
+              type="text"
+              placeholder="e.g. Web-Frontend, Backend-API"
+              bind:value={newAssignTemplates}
+              class="pastel-input"
+            />
+          </div>
+        </div>
+        <button
+          type="button"
+          class="btn-add-template"
+          onclick={addAssignment}
+          disabled={!newAssignUser.trim()}
+        >
+          <Icon name="plus" size={14} />
+          <span>Add Assignment</span>
+        </button>
+      </div>
+
+      <div class="panel-footer" style="margin-top: 0.85rem;">
         <div class="syntax-guide-wrap">
           <span class="syntax-guide">
-            Format: <code>user,prefix,templates</code> or import a Provisioning <code>.yaml</code> file.
+            Specify student username, optional prefix, and template keys/names for each assignment, or import a Provisioning <code>.yaml</code> file.
           </span>
           {#if hasUnparsedChanges}
             <span class="unparsed-indicator">
@@ -719,7 +852,7 @@
         {#if parsedPlans.length === 0}
           <div class="empty-state-box">
             <Icon name="repo" size={32} color="#94a3b8" />
-            <p class="empty-text">No repository plans generated. Provide templates and user assignments above.</p>
+            <p class="empty-text">No repository plans generated. Provide templates and user assignments above or import a YAML configuration.</p>
           </div>
         {:else}
           <table class="pro-table">
@@ -1334,17 +1467,11 @@
     box-shadow: none;
   }
 
-  /* Split Workspace */
+  /* Stacked Workspace: Input on top, Matrix below */
   .split-workspace {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 1.5rem;
-  }
-
-  @media (max-width: 960px) {
-    .split-workspace {
-      grid-template-columns: 1fr;
-    }
   }
 
   .panel-header {
@@ -1418,33 +1545,7 @@
     border-color: #fecdd3;
   }
 
-  .editor-container {
-    margin-bottom: 0.65rem;
-  }
 
-  .pastel-textarea {
-    width: 100%;
-    box-sizing: border-box;
-    background: #f8fafc;
-    border: 1px solid #cbd5e1;
-    color: #0f172a;
-    border-radius: 8px;
-    padding: 0.75rem;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.825rem;
-    line-height: 1.5;
-    resize: vertical;
-    white-space: pre;
-    overflow-x: auto;
-    transition: all 0.2s ease;
-  }
-
-  .pastel-textarea:focus {
-    outline: none;
-    border-color: #6366f1;
-    background: #ffffff;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
-  }
 
   .panel-footer {
     display: flex;
@@ -1899,15 +2000,4 @@
     to { transform: rotate(360deg); }
   }
 
-  .visually-hidden {
-    position: absolute;
-    clip-path: inset(50%);
-    overflow: hidden;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    border: 0;
-    white-space: nowrap;
-  }
 </style>
