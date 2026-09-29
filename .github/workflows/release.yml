@@ -1,0 +1,93 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Release Tag (e.g. v0.1.0). Leave blank to use version from tauri.conf.json (v__VERSION__)'
+        required: false
+        default: ''
+      release_name:
+        description: 'Release Title. Leave blank to use "GitHub Automation Studio v__VERSION__"'
+        required: false
+        default: ''
+      release_notes:
+        description: 'Release description / changelog'
+        required: false
+        default: 'Automated multi-platform release of GitHub Automation Studio for Windows and macOS.'
+      draft:
+        description: 'Create draft release'
+        type: boolean
+        required: false
+        default: false
+      prerelease:
+        description: 'Mark as pre-release'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: 'windows-latest'
+            args: ''
+          - platform: 'macos-latest'
+            args: '--target aarch64-apple-darwin'
+          - platform: 'macos-latest'
+            args: '--target x86_64-apple-darwin'
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || 'x86_64-pc-windows-msvc' }}
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './apps/src-tauri -> target'
+
+      - name: Install frontend dependencies
+        run: bun install --frozen-lockfile
+        working-directory: ./apps
+
+      - name: Build Tauri application and publish to GitHub Releases
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: ./apps
+          tauriScript: bun run tauri
+          tagName: ${{ github.event.inputs.tag_name || 'v__VERSION__' }}
+          releaseName: ${{ github.event.inputs.release_name || 'GitHub Automation Studio v__VERSION__' }}
+          releaseBody: ${{ github.event.inputs.release_notes || 'Automated multi-platform release of GitHub Automation Studio for Windows and macOS.' }}
+          releaseDraft: ${{ github.event.inputs.draft == 'true' || github.event.inputs.draft == true }}
+          prerelease: ${{ github.event.inputs.prerelease == 'true' || github.event.inputs.prerelease == true }}
+          args: ${{ matrix.args }}
