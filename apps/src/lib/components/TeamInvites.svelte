@@ -233,6 +233,17 @@
   }
 
   function clearAll() {
+    orgName = "";
+    role = "member";
+    invitations = [];
+    parsedEntries = [];
+    currentProgress = null;
+    summary = null;
+    executionResults = [];
+    onLog("info", "Cleared all invitations and organization configuration.");
+  }
+
+  function clearInvitations() {
     invitations = [];
     parsedEntries = [];
     currentProgress = null;
@@ -322,6 +333,15 @@
             <Icon name="download" size={14} color="#4f46e5" />
             <span>Export YAML</span>
           </button>
+          <button
+            type="button"
+            class="action-btn btn-danger-ghost"
+            onclick={clearAll}
+            title="Clear all configuration and invitations"
+          >
+            <Icon name="trash" size={14} color="#e11d48" />
+            <span>Clear</span>
+          </button>
         </div>
       </div>
       <p class="workflow-desc">
@@ -403,7 +423,7 @@
           <span class="count-tag">{invitations.length} users</span>
         </div>
         <div class="panel-actions">
-          <button type="button" class="action-btn btn-danger-ghost" onclick={clearAll} title="Clear all invitations">
+          <button type="button" class="action-btn btn-danger-ghost" onclick={clearInvitations} title="Clear all invitations">
             <Icon name="trash" size={14} color="#e11d48" />
             <span>Clear</span>
           </button>
