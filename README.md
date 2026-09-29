@@ -1,114 +1,114 @@
 # GitHub Automation Studio
 
-Aplikasi desktop *cross-platform* yang dibangun menggunakan **Tauri v2**, **SvelteKit** (dengan **Svelte 5 Runes** dan **Bun** sebagai runtime/package manager), serta **Rust** pada sisi backend. 
+A modern, cross-platform desktop application built with **Tauri v2**, **SvelteKit** (featuring **Svelte 5 Runes** and **Bun** as runtime/package manager), and a high-performance **Rust** backend.
 
-Aplikasi ini mengintegrasikan dan memodernisasi alur kerja otomatisasi GitHub untuk manajemen tim organisasi dan *provisioning* repositori tugas siswa/mahasiswa secara native tanpa ketergantungan pada script shell bash eksternal.
-
----
-
-## Daftar Isi
-
-- [Fitur Utama](#fitur-utama)
-  - [1. Otentikasi Terpadu](#1-otentikasi-terpadu)
-  - [2. Modul 001: Undangan Tim Organisasi GitHub](#2-modul-001-undangan-tim-organisasi-github)
-  - [3. Modul 002: Provisioning Repositori Tugas](#3-modul-002-provisioning-repositori-tugas)
-  - [4. Console & Streaming Log Realtime](#4-console--streaming-log-realtime)
-- [Struktur Proyek](#struktur-proyek)
-- [Prasyarat Sistem](#prasyarat-sistem)
-- [Panduan Pengembangan & Menjalankan Aplikasi](#panduan-pengembangan--menjalankan-aplikasi)
-  - [1. Instalasi Dependensi Frontend](#1-instalasi-dependensi-frontend)
-  - [2. Pemeriksaan Tipe & Pengujian Unit](#2-pemeriksaan-tipe--pengujian-unit)
-  - [3. Menjalankan Mode Development](#3-menjalankan-mode-development)
-  - [4. Build Aplikasi Desktop](#4-build-aplikasi-desktop)
-- [Format Konfigurasi YAML](#format-konfigurasi-yaml)
-  - [Contoh YAML Undangan Tim (Module 001)](#contoh-yaml-undangan-tim-module-001)
-  - [Contoh YAML Provisioning Repositori (Module 002)](#contoh-yaml-provisioning-repositori-module-002)
-- [CI/CD & Otomatisasi Rilis (GitHub Actions)](#cicd--otomatisasi-rilis-github-actions)
-- [Lisensi](#lisensi)
+This application integrates and modernizes GitHub automation workflows for organization team management and student assignment repository provisioning natively—eliminating external shell script dependencies while providing an intuitive, reactive user interface.
 
 ---
 
-## Fitur Utama
+## Table of Contents
 
-### 1. Otentikasi Terpadu
-- **GitHub Personal Access Token (PAT)** dengan opsi tampil/sembunyikan token.
-- **Deteksi Otomatis Satu Klik**: Mendeteksi token aktif langsung dari GitHub CLI (`gh auth token`) jika terpasang di sistem.
-- **Verifikasi Realtime**: Memvalidasi token ke GitHub API secara langsung dan menampilkan identitas pengguna terotentikasi (nama, username, ID, dan avatar).
-- **Penyimpanan Lokal Persisten**: Token disimpan dengan aman pada local storage agar tidak perlu dimasukkan ulang setiap sesi.
+- [Key Features](#key-features)
+  - [1. Unified Authentication](#1-unified-authentication)
+  - [2. Module 001: GitHub Organization Team Invitations](#2-module-001-github-organization-team-invitations)
+  - [3. Module 002: Assignment Repository Provisioning](#3-module-002-assignment-repository-provisioning)
+  - [4. Real-time Console & Log Streaming](#4-real-time-console--log-streaming)
+- [Project Architecture](#project-architecture)
+- [System Prerequisites](#system-prerequisites)
+- [Getting Started & Development](#getting-started--development)
+  - [1. Install Frontend Dependencies](#1-install-frontend-dependencies)
+  - [2. Type Checking & Unit Tests](#2-type-checking--unit-tests)
+  - [3. Run in Development Mode](#3-run-in-development-mode)
+  - [4. Build Desktop Application Installers](#4-build-desktop-application-installers)
+- [YAML Configuration Specification](#yaml-configuration-specification)
+  - [Team Invitations Sample (Module 001)](#team-invitations-sample-module-001)
+  - [Repository Provisioning Sample (Module 002)](#repository-provisioning-sample-module-002)
+- [CI/CD & Automated Releases (GitHub Actions)](#cicd--automated-releases-github-actions)
+- [License](#license)
 
-### 2. Modul 001: Undangan Tim Organisasi GitHub
-- **Konfigurasi Organisasi**: Menentukan nama target organisasi GitHub dan memilih peran keanggotaan (`member` atau `maintainer`).
-- **Tabel Daftar Undangan Interaktif**: Input data pengguna dan tim target langsung melalui tabel, bar penambahan baris inline, serta tombol hapus per baris.
-- **Realtime Pre-Flight Preview**: Tabel pratinjau verifikasi diperbarui secara instan dan otomatis saat ada perubahan pada tabel tanpa perlu menekan tombol parse ulang.
-- **Normalisasi Slug Tim Otomatis**: Nama tim dikonversi menjadi slug standar GitHub (contoh: `"Phase 1 - Set 1"` &rarr; `phase-1-set-1`).
-- **Mode Uji Coba Aman (Dry-Run)**: Mensimulasikan seluruh proses keanggotaan dan undangan tanpa melakukan perubahan nyata pada GitHub.
-- **Import & Export YAML**: Mendukung ekspor konfigurasi ke file `.yaml` dan impor kembali dengan sekali klik.
-- **Tombol Clear Khusus**: Tombol Clear di header untuk mereset seluruh formulir dan konfigurasi, serta tombol Clear di tabel untuk menghapus daftar undangan.
+---
 
-### 3. Modul 002: Provisioning Repositori Tugas
-- **Konfigurasi Organisasi & Reviewer**: Pengaturan target organisasi dan daftar akun maintainer/reviewer.
+## Key Features
+
+### 1. Unified Authentication
+- **GitHub Personal Access Token (PAT)** management with secure visibility toggle.
+- **One-Click Auto Detection**: Automatically reads active authentication credentials from the local GitHub CLI (`gh auth token`) when available.
+- **Live Token Verification**: Instant validation against GitHub's API displaying user identity (display name, username, user ID, and avatar).
+- **Persistent Local Storage**: Securely caches credentials locally across app restarts.
+
+### 2. Module 001: GitHub Organization Team Invitations
+- **Organization & Role Configuration**: Define the target GitHub Organization and enforce membership role (`member` or `maintainer`).
+- **Interactive Invitation Table**: Add, edit, and remove student usernames and comma-separated target teams directly in a clean table interface.
+- **Real-time Pre-Flight Preview**: The preview table updates instantly and automatically as you modify table rows—no manual "re-parse" button required.
+- **Automated Slug Normalization**: Converts raw team names into GitHub-compatible slugs (e.g., `"Phase 1 - Set 1"` &rarr; `phase-1-set-1`).
+- **Safe Dry-Run Mode**: Test and verify invitation rosters without modifying organization memberships or sending actual invites.
+- **YAML Import & Export**: One-click export to `.yaml` and instant import of existing roster files.
+- **Dedicated Clear Action**: Header "Clear" button resets configuration and table data back to empty state.
+
+### 3. Module 002: Assignment Repository Provisioning
+- **Organization & Maintainer Setup**: Configure target organization and maintainer/reviewer usernames.
 - **Template Repository Catalog**:
-  - Tabel katalog template interaktif (Key, Nama Repositori, dan Batas Waktu / Deadline).
-  - Input batas waktu dilengkapi pemilih **Kalender** dan **Jam** terintegrasi.
+  - Interactive catalog table managing template keys, source repository URLs, and submission deadlines.
+  - Interactive **Calendar** date picker and **Clock** time picker for deadline selection.
 - **User Assignments Input**:
-  - Penugasan repositori per siswa dengan prefix cohort opsional.
-  - **Validasi Ketat Katalog**: Memastikan template yang ditugaskan benar-benar ada di *Template Repository Catalog*. Dilengkapi dengan dropdown autocomplete `<datalist>` dan penanda peringatan jika ada template yang tidak terdaftar.
-- **Realtime Pre-Flight Repository Matrix**:
-  - Matriks pratinjau diperbarui secara langsung saat data katalog atau penugasan diubah.
-  - Hanya template valid dari katalog yang akan dimasukkan ke dalam matriks rilis.
-- **Pipeline Provisioning Native Multi-Langkah**:
-  1. Membuat private repository dari template (`POST /repos/{template_owner}/{template_repo}/generate`).
-  2. Menunggu hingga repositori berhasil diinisialisasi oleh GitHub.
-  3. Menambahkan hak akses kontributor (`push`/write) kepada siswa.
-  4. Menambahkan hak akses `maintain` kepada seluruh reviewer yang ditentukan.
-  5. Memperbarui deskripsi repositori dengan tenggat waktu penugasan.
-  6. Membuat milestone `"Assignment Deadline"` dengan tanggal jatuh tempo standar ISO 8601.
-  7. Membuat issue notifikasi pertama yang terhubung langsung ke milestone.
-  8. Membuat branch `feedback`, menambahkan file `.github/FEEDBACK_HINT.md`, dan membuka **Feedback Pull Request** untuk proses peninjauan kode.
-- **Import & Export YAML**: Dukungan penuh impor dan ekspor konfigurasi lengkap dalam format YAML.
+  - Assign student repositories with optional cohort/batch prefixes (e.g. `BATCH-01-DEV`).
+  - **Strict Catalog Validation**: Ensures assigned templates exist in the *Template Repository Catalog*. Includes native `<datalist>` autocomplete suggestions and visible warning badges for unrecognized templates.
+- **Real-time Pre-Flight Repository Matrix**:
+  - Instant live computation of target repository names and formatted ISO 8601 deadlines.
+  - Strictly filters and excludes non-catalog templates to prevent accidental phantom repositories.
+- **Native 8-Step Provisioning Pipeline**:
+  1. Generate private repository from template (`POST /repos/{template_owner}/{template_repo}/generate`).
+  2. Poll and await repository initialization on GitHub.
+  3. Grant collaborator write access (`push`) to the assigned student.
+  4. Grant maintainer access (`maintain`) to designated reviewers.
+  5. Update repository description with assignment submission deadline.
+  6. Create milestone `"Assignment Deadline"` with ISO 8601 due date.
+  7. Create initial notification issue linked to the milestone.
+  8. Create `feedback` branch, commit `.github/FEEDBACK_HINT.md`, and open a **Feedback Pull Request** requesting reviewer reviews.
+- **YAML Import & Export**: Comprehensive import and export for full provisioning configuration and assignment lists.
 
-### 4. Console & Streaming Log Realtime
-- Output log proses dikirimkan secara langsung dari backend Rust melalui event channel Tauri.
-- Filter tingkat log: `All`, `Info`, `Success`, `Warn`, dan `Error`.
-- Fitur pencarian teks log, auto-scroll realtime, pembersihan log, dan penyalinan seluruh log ke clipboard (*Copy Logs*).
+### 4. Real-time Console & Log Streaming
+- Live activity logs streamed directly from the Rust backend via Tauri event channels.
+- Filter by level: `All`, `Info`, `Success`, `Warn`, and `Error`.
+- Live search filtering, autoscroll toggle, log clearing, and one-click clipboard copy (*Copy Logs*).
 
 ---
 
-## Struktur Proyek
+## Project Architecture
 
 ```
 global-tools/
 ├── .github/
 │   └── workflows/
-│       └── release.yml          # GitHub Actions workflow untuk rilis multi-platform (Windows & macOS)
-├── apps/                        # Aplikasi Desktop Tauri + SvelteKit
-│   ├── package.json             # Konfigurasi dependensi frontend (Bun)
+│       └── release.yml          # GitHub Actions workflow for multi-platform releases (Windows & macOS)
+├── apps/                        # Tauri + SvelteKit Desktop App
+│   ├── package.json             # Frontend dependencies managed with Bun
 │   ├── svelte.config.js
 │   ├── vite.config.js
-│   ├── src/                     # Frontend SvelteKit 2 + Svelte 5 Runes
+│   ├── src/                     # SvelteKit 2 + Svelte 5 Runes frontend
 │   │   ├── app.html
 │   │   ├── lib/
-│   │   │   ├── types.ts         # Definisi tipe TypeScript
+│   │   │   ├── types.ts         # Shared TypeScript interfaces
 │   │   │   └── components/
-│   │   │       ├── Header.svelte            # Header otentikasi PAT & status token
-│   │   │       ├── TeamInvites.svelte       # Komponen Modul 001 (Undangan Tim)
-│   │   │       ├── RepoProvisioning.svelte  # Komponen Modul 002 (Provisioning Repositori)
-│   │   │       ├── ConsoleLogs.svelte       # Terminal streaming log aktivitas
-│   │   │       └── Icon.svelte              # Komponen ikon SVG serbaguna
+│   │   │       ├── Header.svelte            # PAT authentication & user status
+│   │   │       ├── TeamInvites.svelte       # Module 001 (Team Invitations)
+│   │   │       ├── RepoProvisioning.svelte  # Module 002 (Repo Provisioning)
+│   │   │       ├── ConsoleLogs.svelte       # Real-time streaming log terminal
+│   │   │       └── Icon.svelte              # Multi-purpose SVG icon library
 │   │   └── routes/
 │   │       ├── +layout.ts
-│   │       └── +page.svelte                 # Halaman utama & navigasi tab
-│   └── src-tauri/               # Backend Native Rust
-│       ├── Cargo.toml           # Dependensi Rust (tauri, reqwest, tokio, serde, chrono, regex)
-│       ├── tauri.conf.json      # Konfigurasi Tauri v2 (window, bundling, izin)
-│       ├── capabilities/        # Izin security Tauri v2
+│   │       └── +page.svelte                 # Dashboard container & tab navigation
+│   └── src-tauri/               # Native Rust Backend
+│       ├── Cargo.toml           # Rust dependencies (tauri, reqwest, tokio, serde, chrono, regex)
+│       ├── tauri.conf.json      # Tauri v2 configuration (window dimensions, bundling, permissions)
+│       ├── capabilities/        # Tauri v2 security capabilities
 │       └── src/
-│           ├── lib.rs           # Entry point aplikasi Tauri
+│           ├── lib.rs           # Tauri app runner & invoke handler registration
 │           ├── main.rs
-│           ├── commands.rs      # Command Tauri & handler pemanggilan frontend
-│           ├── github_client.rs # Klien HTTP GitHub REST API berbasis Rust
-│           └── parser.rs        # Parser data tim, assignment, catalog & unit tests
-├── dummy-yamls/                 # File contoh YAML siap pakai untuk pengujian
+│           ├── commands.rs      # Tauri commands & event emission
+│           ├── github_client.rs # Pure Rust GitHub REST API client
+│           └── parser.rs        # Data normalization, catalog resolution & unit tests
+├── dummy-yamls/                 # Sample YAML configuration files for testing
 │   ├── team_invitations_sample.yaml
 │   └── repo_provisioning_sample.yaml
 ├── LICENSE
@@ -117,67 +117,67 @@ global-tools/
 
 ---
 
-## Prasyarat Sistem
+## System Prerequisites
 
-Sebelum menjalankan atau membangun aplikasi, pastikan perangkat Anda telah terpasang:
+Ensure the following tools are installed on your machine before running or building the application:
 
-1. **Bun** (v1.0 atau lebih baru)  
-   Instalasi via terminal:
+1. **Bun** (v1.0 or newer)  
+   Install via terminal:
    ```bash
    curl -fsSL https://bun.sh/install | bash
    ```
-2. **Rust & Cargo** (Edisi 2021 / stable)  
-   Instalasi via rustup:
+2. **Rust & Cargo** (2021 Edition / stable)  
+   Install via rustup:
    ```bash
    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
    ```
-3. **Build Tools Sesuai Sistem Operasi**:
+3. **OS-Specific Build Tools**:
    - **macOS**: Xcode Command Line Tools (`xcode-select --install`).
-   - **Windows**: Microsoft Visual Studio C++ Build Tools (dengan komponen Desktop development with C++).
-4. **GitHub CLI (`gh`)** *(Opsional)*: Untuk mendeteksi token GitHub secara otomatis.
+   - **Windows**: Microsoft Visual Studio C++ Build Tools (with "Desktop development with C++").
+4. **GitHub CLI (`gh`)** *(Optional)*: For automatic token detection.
 
 ---
 
-## Panduan Pengembangan & Menjalankan Aplikasi
+## Getting Started & Development
 
-Jalankan seluruh perintah dari root direktori proyek:
+All commands should be executed from the repository root:
 
-### 1. Instalasi Dependensi Frontend
+### 1. Install Frontend Dependencies
 ```bash
 bun install --cwd apps
 ```
 
-### 2. Pemeriksaan Tipe & Pengujian Unit
+### 2. Type Checking & Unit Tests
 ```bash
-# Pemeriksaan tipe Svelte & TypeScript
+# Frontend SvelteKit and TypeScript verification
 bun run --cwd apps check
 
-# Pengujian unit parser backend Rust
+# Backend Rust parser and normalization unit tests
 cargo test --manifest-path apps/src-tauri/Cargo.toml
 ```
 
-### 3. Menjalankan Mode Development
-Menjalankan frontend SvelteKit dengan hot-reload dan jendela aplikasi desktop Tauri secara simultan:
+### 3. Run in Development Mode
+Starts the Vite dev server with hot-module reloading alongside the native Tauri desktop window:
 ```bash
 bun run --cwd apps tauri dev
 ```
 
-### 4. Build Aplikasi Desktop
-Menghasilkan installer native produksi:
+### 4. Build Desktop Application Installers
+Compile optimized release binaries and native installer packages:
 ```bash
 bun run --cwd apps tauri build
 ```
-Hasil kompilasi dan paket installer (*installer bundle*) akan tersedia di:
-- **macOS**: `apps/src-tauri/target/release/bundle/dmg/` (file `.dmg`) dan `.app`
-- **Windows**: `apps/src-tauri/target/release/bundle/nsis/` (file `.exe`) dan `msi/` (file `.msi`)
+Compiled artifacts will be located in:
+- **macOS**: `apps/src-tauri/target/release/bundle/dmg/` (`.dmg` installer) and `.app` bundle.
+- **Windows**: `apps/src-tauri/target/release/bundle/nsis/` (`.exe` setup) and `msi/` (`.msi` installer).
 
 ---
 
-## Format Konfigurasi YAML
+## YAML Configuration Specification
 
-Aplikasi mendukung impor dan ekspor konfigurasi menggunakan format file YAML. Contoh file YAML siap pakai tersedia di direktori [`dummy-yamls/`](file:///Users/standard/Workspaces/Works/Works-AIEN/global-tools/dummy-yamls).
+Configurations can be imported and exported as `.yaml` files. Ready-to-use sample files are located in the [`dummy-yamls/`](file:///Users/standard/Workspaces/Works/Works-AIEN/global-tools/dummy-yamls) directory.
 
-### Contoh YAML Undangan Tim (Module 001)
+### Team Invitations Sample (Module 001)
 File: `team_invitations_sample.yaml`
 ```yaml
 organization: my-org-name
@@ -192,7 +192,7 @@ invitations:
       - Phase 1 - Set 1
 ```
 
-### Contoh YAML Provisioning Repositori (Module 002)
+### Repository Provisioning Sample (Module 002)
 File: `repo_provisioning_sample.yaml`
 ```yaml
 organization: my-org-name
@@ -220,32 +220,32 @@ assignments:
 
 ---
 
-## CI/CD & Otomatisasi Rilis (GitHub Actions)
+## CI/CD & Automated Releases (GitHub Actions)
 
-Alur kerja GitHub Actions telah dikonfigurasi di file [`.github/workflows/release.yml`](file:///Users/standard/Workspaces/Works/Works-AIEN/global-tools/.github/workflows/release.yml) untuk membuat rilis biner resmi secara otomatis.
+A GitHub Actions workflow is configured in [`.github/workflows/release.yml`](file:///Users/standard/Workspaces/Works/Works-AIEN/global-tools/.github/workflows/release.yml) to build and publish official release binaries.
 
-### Cara Menjalankan Rilis Manual:
-1. Pastikan seluruh commit telah di-push ke GitHub:
+### Triggering a Manual Release:
+1. Push your latest commits to GitHub:
    ```bash
    git push origin main
    ```
-2. Buka repositori Anda di GitHub melalui browser.
-3. Klik tab **Actions**.
-4. Di panel sebelah kiri, pilih workflow **Release**.
-5. Klik tombol menu dropdown **Run workflow** di sisi kanan atas:
-   - Masukkan tag rilis (contoh: `v0.1.0`) atau biarkan kosong untuk menggunakan versi dari `tauri.conf.json`.
-   - Masukkan judul rilis atau biarkan kosong untuk menggunakan judul default.
-   - Atur opsi rilis draft (*Draft*) atau pra-rilis (*Pre-release*) jika diperlukan.
-6. Klik tombol **Run workflow**.
+2. Navigate to your repository on GitHub in your web browser.
+3. Select the **Actions** tab.
+4. In the left sidebar, click the **Release** workflow.
+5. Click the **Run workflow** dropdown on the right:
+   - Provide a release tag (e.g., `v0.1.0`) or leave blank to automatically use the version defined in `tauri.conf.json`.
+   - Provide a release title or leave blank to use the default title.
+   - Configure **Draft** or **Pre-release** flags if desired.
+6. Click **Run workflow**.
 
-GitHub Actions akan secara otomatis menjalankan proses kompilasi paralel untuk:
-- **Windows (`windows-latest`)**: Menghasilkan installer `.exe` (NSIS) dan `.msi` (WiX).
-- **macOS (`macos-latest`)**: Menghasilkan installer `.dmg` dan file `.app` untuk arsitektur **Apple Silicon** (`aarch64-apple-darwin`) dan **Intel** (`x86_64-apple-darwin`).
+GitHub Actions will execute concurrent matrix builds for:
+- **Windows (`windows-latest`)**: Generates `.exe` (NSIS setup) and `.msi` (WiX installer).
+- **macOS (`macos-latest`)**: Generates `.dmg` and `.app` bundles for both **Apple Silicon** (`aarch64-apple-darwin`) and **Intel** (`x86_64-apple-darwin`) architectures.
 
-Seluruh paket installer akan otomatis diunggah langsung ke halaman **Releases** repositori GitHub Anda.
+All installer bundles will be automatically attached and published directly to your repository's **Releases** page.
 
 ---
 
-## Lisensi
+## License
 
-Proyek ini dilisensikan di bawah lisensi [MIT](file:///Users/standard/Workspaces/Works/Works-AIEN/global-tools/LICENSE).
+This project is licensed under the [MIT License](file:///Users/standard/Workspaces/Works/Works-AIEN/global-tools/LICENSE).
