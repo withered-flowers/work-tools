@@ -54,8 +54,6 @@ export interface ProvisionPlan {
 
 export interface RepoProvisionConfig {
   org_name: string;
-  team_name: string | null;
-  skip_sync: boolean;
   reviewers: string[];
   dry_run: boolean;
 }

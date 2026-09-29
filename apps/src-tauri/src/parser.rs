@@ -71,12 +71,18 @@ pub fn clean_template_name(repo_basename: &str) -> String {
     cleaned.trim_matches(|c| c == '-' || c == '_').to_string()
 }
 
-/// Formats deadline to ISO 8601 with Asia/Jakarta (+07:00) timezone if in `YYYY-MM-DD HH:MM` format
+/// Formats deadline to ISO 8601 with Asia/Jakarta (+07:00) timezone if in `YYYY-MM-DD HH:MM` or `YYYY-MM-DDTHH:MM` format
 pub fn format_deadline_iso(deadline: &str) -> String {
     let trimmed = deadline.trim();
-    let re = Regex::new(r"^(\d{4}-\d{2}-\d{2})\s+(\d{2}:\d{2})$").unwrap();
-    if let Some(caps) = re.captures(trimmed) {
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let re_datetime = Regex::new(r"^(\d{4}-\d{2}-\d{2})[\sT](\d{2}:\d{2})(:\d{2})?$").unwrap();
+    let re_date_only = Regex::new(r"^(\d{4}-\d{2}-\d{2})$").unwrap();
+    if let Some(caps) = re_datetime.captures(trimmed) {
         format!("{}T{}:00+07:00", &caps[1], &caps[2])
+    } else if let Some(caps) = re_date_only.captures(trimmed) {
+        format!("{}T23:59:00+07:00", &caps[1])
     } else {
         trimmed.to_string()
     }
@@ -135,7 +141,6 @@ pub fn parse_team_invitations(input: &str) -> Vec<TeamInvitationEntry> {
 pub fn resolve_template_info(
     query: &str,
     catalog: &[TemplateEntry],
-    default_deadline: &str,
     org_name: &str,
 ) -> ResolvedTemplateInfo {
     let query_clean = query.trim();
@@ -167,11 +172,6 @@ pub fn resolve_template_info(
         } else {
             matched_repo = query_clean.to_string();
         }
-        matched_deadline = default_deadline.trim().to_string();
-    }
-
-    if matched_deadline.is_empty() {
-        matched_deadline = default_deadline.trim().to_string();
     }
 
     let org = if matched_repo.contains('/') {
@@ -210,8 +210,6 @@ pub fn resolve_template_info(
 pub fn parse_repo_assignments(
     input: &str,
     catalog: &[TemplateEntry],
-    fallback_prefix: &str,
-    default_deadline: &str,
     default_org: &str,
 ) -> Vec<ProvisionPlan> {
     // Stage 1: Collect raw (username, prefix, templates)
@@ -251,7 +249,7 @@ pub fn parse_repo_assignments(
                         let mut sub = u_trim.splitn(2, '|');
                         (sub.next().unwrap().trim(), sub.next().unwrap().trim())
                     } else {
-                        (u_trim, fallback_prefix.trim())
+                        (u_trim, "")
                     };
                     raw_assignments.push((
                         u_name.to_string(),
@@ -261,11 +259,7 @@ pub fn parse_repo_assignments(
                 }
             } else if parts.len() >= 3 {
                 let u = parts[0].to_string();
-                let p = if parts[1].is_empty() {
-                    fallback_prefix.trim().to_string()
-                } else {
-                    parts[1].to_string()
-                };
+                let p = parts[1].to_string();
                 let t = parts[2..].join(",");
                 raw_assignments.push((u, p, t));
             } else if parts.len() == 2 {
@@ -273,18 +267,10 @@ pub fn parse_repo_assignments(
                 if prefix_regex.is_match(parts[1]) {
                     raw_assignments.push((u, parts[1].to_string(), "all".to_string()));
                 } else {
-                    raw_assignments.push((
-                        u,
-                        fallback_prefix.trim().to_string(),
-                        parts[1].to_string(),
-                    ));
+                    raw_assignments.push((u, String::new(), parts[1].to_string()));
                 }
             } else {
-                raw_assignments.push((
-                    parts[0].to_string(),
-                    fallback_prefix.trim().to_string(),
-                    "all".to_string(),
-                ));
+                raw_assignments.push((parts[0].to_string(), String::new(), "all".to_string()));
             }
         } else if line.contains(',') {
             let parts: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
@@ -298,7 +284,7 @@ pub fn parse_repo_assignments(
                 };
                 raw_assignments.push((u, p, t));
             } else {
-                let p = fallback_prefix.trim().to_string();
+                let p = String::new();
                 let t = if parts.len() > 1 {
                     parts[1..].join(",")
                 } else {
@@ -307,11 +293,7 @@ pub fn parse_repo_assignments(
                 raw_assignments.push((u, p, t));
             }
         } else {
-            raw_assignments.push((
-                line.to_string(),
-                fallback_prefix.trim().to_string(),
-                "all".to_string(),
-            ));
+            raw_assignments.push((line.to_string(), String::new(), "all".to_string()));
         }
     }
 
@@ -360,7 +342,7 @@ pub fn parse_repo_assignments(
 
         for t_query in user_templates {
             let resolved =
-                resolve_template_info(&t_query, &dynamic_catalog, default_deadline, default_org);
+                resolve_template_info(&t_query, &dynamic_catalog, default_org);
             let target_repo_name = if !user_prefix.is_empty() {
                 format!("{}-{}-{}", resolved.clean_repo_name, user_prefix, user)
             } else {
@@ -410,6 +392,14 @@ mod tests {
             "2026-12-31T23:59:00+07:00"
         );
         assert_eq!(
+            format_deadline_iso("2026-12-31T23:59"),
+            "2026-12-31T23:59:00+07:00"
+        );
+        assert_eq!(
+            format_deadline_iso("2026-12-31"),
+            "2026-12-31T23:59:00+07:00"
+        );
+        assert_eq!(
             format_deadline_iso("2026-12-31T23:59:00Z"),
             "2026-12-31T23:59:00Z"
         );
@@ -439,12 +429,12 @@ janedoe,phase-1-set-1,phase-2-set-1
             TemplateEntry {
                 key: None,
                 repo: "ORGANIZATION-NAME/P0-LC1-Set-1".to_string(),
-                deadline: "2026-12-31 23:59".to_string(),
+                deadline: "2026-12-31T23:59".to_string(),
             },
             TemplateEntry {
                 key: None,
                 repo: "ORGANIZATION-NAME/P0-LC2-Set-1".to_string(),
-                deadline: "2026-12-31 23:59".to_string(),
+                deadline: "2026-12-31T23:59".to_string(),
             },
         ];
 
@@ -452,8 +442,6 @@ janedoe,phase-1-set-1,phase-2-set-1
         let plans = parse_repo_assignments(
             input,
             &catalog,
-            "FALLBACK",
-            "2026-12-31 23:59",
             "ORGANIZATION-NAME",
         );
 
@@ -469,5 +457,15 @@ janedoe,phase-1-set-1,phase-2-set-1
             "ORGANIZATION-NAME/P0-LC1-Set-1-BATCH-045-DEV-user1"
         );
         assert_eq!(plans[0].deadline_iso, "2026-12-31T23:59:00+07:00");
+
+        // Test without prefix on user assignment
+        let input_no_prefix = "user2,P0-LC1-Set-1";
+        let plans_no_prefix = parse_repo_assignments(
+            input_no_prefix,
+            &catalog,
+            "ORGANIZATION-NAME",
+        );
+        assert_eq!(plans_no_prefix.len(), 1);
+        assert_eq!(plans_no_prefix[0].target_repo_name, "P0-LC1-Set-1-user2");
     }
 }

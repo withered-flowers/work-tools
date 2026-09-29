@@ -10,6 +10,7 @@
     ProvisionSummary,
   } from "$lib/types";
   import Icon from "./Icon.svelte";
+  import DateTimePicker from "./DateTimePicker.svelte";
 
   let {
     token = "",
@@ -21,35 +22,43 @@
 
   // Global Configuration
   let orgName = $state("ORGANIZATION-NAME");
-  let teamName = $state("");
-  let skipSync = $state(false);
   let reviewersInput = $state("reviewer1, reviewer2");
-  let fallbackPrefix = $state("BATCH-001-DEV");
-  let defaultDeadline = $state("2026-12-31 23:59");
   let dryRun = $state(true);
+
+  function normalizeDeadline(val?: string | null): string {
+    if (!val || !val.trim()) return "2026-12-31T23:59";
+    const trimmed = val.trim();
+    if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/.test(trimmed)) {
+      return trimmed.replace(/\s+/, "T").slice(0, 16);
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      return `${trimmed}T23:59`;
+    }
+    return trimmed.slice(0, 16);
+  }
 
   // Template Catalog
   let templates = $state<TemplateEntry[]>([
     {
       key: "P0-LC1-Set-1",
       repo: "ORGANIZATION-NAME/P0-LC1-Set-1",
-      deadline: "2026-12-31 23:59",
+      deadline: "2026-12-31T23:59",
     },
     {
       key: "P0-LC2-Set-1",
       repo: "ORGANIZATION-NAME/P0-LC2-Set-1",
-      deadline: "2026-12-31 23:59",
+      deadline: "2026-12-31T23:59",
     },
     {
       key: "P0-LC3-Set-1",
       repo: "ORGANIZATION-NAME/P0-LC3-Set-1",
-      deadline: "2026-12-31 23:59",
+      deadline: "2026-12-31T23:59",
     },
   ]);
 
   let newTemplateRepo = $state("");
   let newTemplateKey = $state("");
-  let newTemplateDeadline = $state("2026-12-31 23:59");
+  let newTemplateDeadline = $state("2026-12-31T23:59");
 
   // User assignments input
   let rawAssignmentsInput = $state(`user1,BATCH-045-DEV,P0-LC1-Set-1,P0-LC2-Set-1
@@ -60,15 +69,11 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
   let lastParsedInput = $state("");
   let lastParsedTemplatesJson = $state("");
   let lastParsedOrg = $state("");
-  let lastParsedPrefix = $state("");
-  let lastParsedDeadline = $state("");
 
   let hasUnparsedChanges = $derived(
     rawAssignmentsInput.trim() !== lastParsedInput.trim() ||
     JSON.stringify(templates) !== lastParsedTemplatesJson ||
-    orgName.trim() !== lastParsedOrg.trim() ||
-    fallbackPrefix.trim() !== lastParsedPrefix.trim() ||
-    defaultDeadline.trim() !== lastParsedDeadline.trim()
+    orgName.trim() !== lastParsedOrg.trim()
   );
 
   let isParsing = $state(false);
@@ -121,16 +126,12 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
       const plans: ProvisionPlan[] = await invoke("preview_repo_provisioning", {
         inputText: rawAssignmentsInput,
         catalog: templates,
-        fallbackPrefix,
-        defaultDeadline,
         orgName,
       });
       parsedPlans = plans;
       lastParsedInput = rawAssignmentsInput;
       lastParsedTemplatesJson = JSON.stringify(templates);
       lastParsedOrg = orgName;
-      lastParsedPrefix = fallbackPrefix;
-      lastParsedDeadline = defaultDeadline;
     } catch (e: any) {
       console.error("Provisioning preview error:", e);
       onLog("error", `Provisioning preview error: ${e}`);
@@ -148,7 +149,7 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
       {
         key: keyTrimmed.length > 0 ? keyTrimmed : null,
         repo: repoTrimmed,
-        deadline: newTemplateDeadline.trim() || defaultDeadline,
+        deadline: normalizeDeadline(newTemplateDeadline),
       },
     ];
     newTemplateRepo = "";
@@ -170,17 +171,17 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
       {
         key: "P0-LC1-Set-1",
         repo: `${org}/P0-LC1-Set-1`,
-        deadline: defaultDeadline,
+        deadline: "2026-12-31T23:59",
       },
       {
         key: "P0-LC2-Set-1",
         repo: `${org}/P0-LC2-Set-1`,
-        deadline: defaultDeadline,
+        deadline: "2026-12-31T23:59",
       },
       {
         key: "P0-LC3-Set-1",
         repo: `${org}/P0-LC3-Set-1`,
-        deadline: defaultDeadline,
+        deadline: "2026-12-31T23:59",
       },
     ];
     onLog("info", "Loaded 3 default template presets.");
@@ -224,7 +225,7 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
               .map((item: any) => ({
                 key: item.key ? String(item.key).trim() : null,
                 repo: String(item.repo || item.name || "").trim(),
-                deadline: String(item.deadline || defaultDeadline).trim(),
+                deadline: normalizeDeadline(item.deadline),
               }))
               .filter((t: TemplateEntry) => t.repo.length > 0);
           } else {
@@ -238,18 +239,18 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
 
               const parts = trimmed.split(",").map((p) => p.trim());
               if (parts.length === 1) {
-                imported.push({ key: null, repo: parts[0], deadline: defaultDeadline });
+                imported.push({ key: null, repo: parts[0], deadline: "2026-12-31T23:59" });
               } else if (parts.length === 2) {
                 if (parts[1].includes("-") || parts[1].includes(":")) {
-                  imported.push({ key: null, repo: parts[0], deadline: parts[1] });
+                  imported.push({ key: null, repo: parts[0], deadline: normalizeDeadline(parts[1]) });
                 } else {
-                  imported.push({ key: parts[0], repo: parts[1], deadline: defaultDeadline });
+                  imported.push({ key: parts[0], repo: parts[1], deadline: "2026-12-31T23:59" });
                 }
               } else if (parts.length >= 3) {
                 imported.push({
                   key: parts[0] ? parts[0] : null,
                   repo: parts[1],
-                  deadline: parts[2] || defaultDeadline,
+                  deadline: normalizeDeadline(parts[2]),
                 });
               }
             }
@@ -338,8 +339,6 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
 
     const config: RepoProvisionConfig = {
       org_name: orgName.trim(),
-      team_name: teamName.trim() ? teamName.trim() : null,
-      skip_sync: skipSync,
       reviewers: reviewersList,
       dry_run: dryRun,
     };
@@ -405,41 +404,6 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
       </div>
 
       <div class="form-cell">
-        <label for="repo-prefix-input" class="form-label">
-          <span>Fallback Cohort Prefix</span>
-        </label>
-        <div class="input-container">
-          <input
-            id="repo-prefix-input"
-            type="text"
-            bind:value={fallbackPrefix}
-            placeholder="e.g. BATCH-001-DEV"
-            class="pastel-input"
-          />
-        </div>
-        <span class="form-hint">Convention format: <code>BATCH-XXX-DEV|REM</code></span>
-      </div>
-
-      <div class="form-cell">
-        <label for="repo-deadline-input" class="form-label">
-          <span>Default Deadline</span>
-        </label>
-        <div class="input-container">
-          <div class="input-with-icon">
-            <Icon name="calendar" size={15} color="#6366f1" />
-            <input
-              id="repo-deadline-input"
-              type="text"
-              bind:value={defaultDeadline}
-              placeholder="YYYY-MM-DD HH:MM"
-              class="pastel-input"
-            />
-          </div>
-        </div>
-        <span class="form-hint">Timezone: Asia/Jakarta (UTC+07:00)</span>
-      </div>
-
-      <div class="form-cell">
         <label for="repo-reviewers-input" class="form-label">
           <span>Reviewers (Maintainers)</span>
         </label>
@@ -453,29 +417,6 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
           />
         </div>
         <span class="form-hint">Assigned maintain access and added to Feedback PR</span>
-      </div>
-
-      <div class="form-cell">
-        <label for="repo-team-input" class="form-label">
-          <span>Team Sync Name (Optional)</span>
-        </label>
-        <div class="input-container">
-          <input
-            id="repo-team-input"
-            type="text"
-            bind:value={teamName}
-            placeholder="e.g. BATCH-001-DEV"
-            class="pastel-input"
-          />
-        </div>
-        <label class="inline-checkbox-label" for="skip-sync-toggle">
-          <input
-            id="skip-sync-toggle"
-            type="checkbox"
-            bind:checked={skipSync}
-          />
-          <span>Skip Team & Org Membership Sync</span>
-        </label>
       </div>
 
       <!-- Execution Mode Switcher Card -->
@@ -580,7 +521,7 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
               <th class="th-index">#</th>
               <th>Template Repository (Org/Repo)</th>
               <th style="width: 170px;">Short Key / Slug</th>
-              <th style="width: 195px;">Deadline (Asia/Jakarta)</th>
+              <th style="width: 270px;">Deadline (Date & Time)</th>
               <th style="width: 60px; text-align: center;">Action</th>
             </tr>
           </thead>
@@ -606,15 +547,10 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
                   />
                 </td>
                 <td>
-                  <div class="cell-date-wrap">
-                    <Icon name="calendar" size={13} color="#6366f1" />
-                    <input
-                      type="text"
-                      bind:value={t.deadline}
-                      placeholder="YYYY-MM-DD HH:MM"
-                      class="table-cell-input date-cell-input"
-                    />
-                  </div>
+                  <DateTimePicker
+                    bind:value={t.deadline}
+                    compact={true}
+                  />
                 </td>
                 <td style="text-align: center;">
                   <button
@@ -658,17 +594,11 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
           />
         </div>
         <div class="add-field-group field-deadline">
-          <label for="new-template-deadline" class="add-field-label">Deadline</label>
-          <div class="input-with-icon">
-            <Icon name="calendar" size={14} color="#6366f1" />
-            <input
-              id="new-template-deadline"
-              type="text"
-              placeholder="YYYY-MM-DD HH:MM"
-              bind:value={newTemplateDeadline}
-              class="pastel-input"
-            />
-          </div>
+          <label for="new-template-deadline" class="add-field-label">Deadline (Date & Time)</label>
+          <DateTimePicker
+            id="new-template-deadline"
+            bind:value={newTemplateDeadline}
+          />
         </div>
       </div>
       <button
@@ -811,7 +741,12 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`}
                     </div>
                   </td>
                   <td class="td-dim">{plan.template_repo}</td>
-                  <td class="td-dim">{plan.deadline}</td>
+                  <td class="td-deadline">
+                    <span class="deadline-chip" title="Deadline: {plan.deadline_iso || plan.deadline}">
+                      <Icon name="calendar" size={11} color="#6366f1" />
+                      <span class="chip-text">{plan.deadline.replace('T', ' ')}</span>
+                    </span>
+                  </td>
                 </tr>
               {/each}
             </tbody>
@@ -1059,14 +994,6 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`}
     margin: 0;
   }
 
-  .form-hint code {
-    font-family: 'JetBrains Mono', monospace;
-    background: #f1f5f9;
-    padding: 0.1rem 0.25rem;
-    border-radius: 4px;
-    color: #4f46e5;
-  }
-
   .input-container {
     width: 100%;
     height: 42px;
@@ -1098,40 +1025,6 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`}
     border-color: #6366f1;
     background: #ffffff;
     box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
-  }
-
-  .input-with-icon {
-    position: relative;
-    display: flex;
-    align-items: center;
-    width: 100%;
-    height: 42px;
-    box-sizing: border-box;
-  }
-
-  .input-with-icon :global(.svg-icon) {
-    position: absolute;
-    left: 10px;
-    pointer-events: none;
-  }
-
-  .input-with-icon input {
-    padding-left: 2.1rem;
-    height: 42px;
-    min-height: 42px;
-    max-height: 42px;
-  }
-
-  .inline-checkbox-label {
-    display: flex;
-    align-items: center;
-    gap: 0.45rem;
-    font-size: 0.75rem;
-    color: #64748b;
-    cursor: pointer;
-    min-height: 18px;
-    line-height: 1.3;
-    margin: 0;
   }
 
   /* Mode Switch Card */
@@ -1307,17 +1200,25 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`}
     color: #4f46e5;
   }
 
-  .date-cell-input {
-    color: #334155;
+  .td-deadline {
+    white-space: nowrap;
   }
 
-  .cell-date-wrap {
-    display: flex;
+  .deadline-chip {
+    display: inline-flex;
     align-items: center;
-    gap: 0.4rem;
+    gap: 0.35rem;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 0.2rem 0.5rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: #334155;
+    font-weight: 500;
   }
 
-  .cell-date-wrap :global(.svg-icon) {
+  .deadline-chip :global(.svg-icon) {
     flex-shrink: 0;
   }
 
@@ -1375,8 +1276,8 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`}
   }
 
   .field-deadline {
-    flex: 1.2;
-    min-width: 170px;
+    flex: 1.6;
+    min-width: 260px;
   }
 
   .add-field-label {

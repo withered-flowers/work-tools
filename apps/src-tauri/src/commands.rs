@@ -77,8 +77,6 @@ pub struct ProvisionSummary {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RepoProvisionConfig {
     pub org_name: String,
-    pub team_name: Option<String>,
-    pub skip_sync: bool,
     pub reviewers: Vec<String>,
     pub dry_run: bool,
 }
@@ -280,15 +278,11 @@ pub async fn run_team_invitations(
 pub fn preview_repo_provisioning(
     input_text: String,
     catalog: Vec<TemplateEntry>,
-    fallback_prefix: String,
-    default_deadline: String,
     org_name: String,
 ) -> Result<Vec<ProvisionPlan>, String> {
     Ok(parse_repo_assignments(
         &input_text,
         &catalog,
-        &fallback_prefix,
-        &default_deadline,
         &org_name,
     ))
 }
@@ -325,82 +319,7 @@ pub async fn run_repo_provisioning(
         ),
     );
 
-    // Step 1: Team & Org Membership Sync (Optional)
-    if !config.skip_sync && config.team_name.as_ref().map_or(false, |t| !t.trim().is_empty()) {
-        let team_name = config.team_name.as_ref().unwrap().trim();
-        let mut sync_members = unique_users.clone();
-        for r in &config.reviewers {
-            let r_trim = r.trim().to_string();
-            if !r_trim.is_empty() && !sync_members.contains(&r_trim) {
-                sync_members.push(r_trim);
-            }
-        }
-
-        emit_log(
-            &app_handle,
-            "info",
-            &format!("Synchronizing Team Memberships for team '{}'...", team_name),
-        );
-
-        if config.dry_run {
-            emit_log(
-                &app_handle,
-                "warn",
-                &format!(
-                    "[DRY-RUN] Would ensure team '{}' exists and sync {} members",
-                    team_name,
-                    sync_members.len()
-                ),
-            );
-        } else {
-            let client_ref = client.as_ref().unwrap();
-            match client_ref.get_or_create_team(&config.org_name, team_name).await {
-                Ok(team_id) => {
-                    for member in sync_members {
-                        match client_ref.get_user_id(&member).await {
-                            Ok(user_id) => {
-                                match client_ref
-                                    .invite_user_to_org(&config.org_name, user_id, Some(team_id))
-                                    .await
-                                {
-                                    Ok(res) => {
-                                        emit_log(
-                                            &app_handle,
-                                            "success",
-                                            &format!("  -> Member: {} {}", member, res),
-                                        );
-                                    }
-                                    Err(e) => {
-                                        emit_log(
-                                            &app_handle,
-                                            "error",
-                                            &format!("  -> Member: {} [INVITE ERROR]: {}", member, e),
-                                        );
-                                    }
-                                }
-                            }
-                            Err(e) => {
-                                emit_log(
-                                    &app_handle,
-                                    "error",
-                                    &format!("  -> Member: {} [USER NOT FOUND]: {}", member, e),
-                                );
-                            }
-                        }
-                    }
-                }
-                Err(err) => {
-                    emit_log(
-                        &app_handle,
-                        "error",
-                        &format!("Failed to get or create team '{}': {}", team_name, err),
-                    );
-                }
-            }
-        }
-    }
-
-    // Step 2: Provision Repositories
+    // Provision Repositories
     let mut success_count = 0;
     let mut failed_count = 0;
 
