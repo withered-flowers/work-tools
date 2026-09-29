@@ -1,6 +1,6 @@
 # GitHub Automation Studio
 
-Aplikasi desktop modern lintas platform (*cross-platform*) yang dibangun menggunakan **Tauri v2**, **SvelteKit** (dengan **Svelte 5 Runes** dan **Bun** sebagai runtime/package manager), serta **Rust** pada sisi backend. 
+Aplikasi desktop *cross-platform* yang dibangun menggunakan **Tauri v2**, **SvelteKit** (dengan **Svelte 5 Runes** dan **Bun** sebagai runtime/package manager), serta **Rust** pada sisi backend. 
 
 Aplikasi ini mengintegrasikan dan memodernisasi alur kerja otomatisasi GitHub untuk manajemen tim organisasi dan *provisioning* repositori tugas siswa/mahasiswa secara native tanpa ketergantungan pada script shell bash eksternal.
 
