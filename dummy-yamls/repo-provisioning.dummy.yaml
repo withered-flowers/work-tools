@@ -1,0 +1,44 @@
+# ==============================================================================
+# GitHub Assignment Repository Provisioning Configuration
+# Import this file using the "Import YAML" button in Module 002.
+# ==============================================================================
+
+name: Software Engineering Bootcamp - Batch 2026
+organization: acme-corp
+
+maintainers:
+  - lead-instructor
+  - senior-mentor
+
+template_catalog:
+  - key: Web-Frontend-Foundations
+    repo: acme-corp/web-frontend-foundations
+    deadline: "2026-12-31T23:59"
+  - key: Backend-API-Service
+    repo: acme-corp/backend-api-service
+    deadline: "2026-12-31T23:59"
+  - key: Fullstack-Capstone
+    repo: acme-corp/fullstack-capstone
+    deadline: "2026-12-31T23:59"
+
+assignments:
+  - user: student-alice
+    prefix: BATCH-01-DEV
+    templates:
+      - Web-Frontend-Foundations
+      - Backend-API-Service
+  - user: student-bob
+    prefix: BATCH-01-REM
+    templates:
+      - Backend-API-Service
+  - user: student-charlie
+    prefix: BATCH-02-DEV
+    templates:
+      - Web-Frontend-Foundations
+      - Fullstack-Capstone
+  - user: student-diana
+    prefix: BATCH-02-REM
+    templates:
+      - Web-Frontend-Foundations
+      - Backend-API-Service
+      - Fullstack-Capstone

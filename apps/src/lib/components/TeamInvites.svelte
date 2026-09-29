@@ -4,6 +4,7 @@
   import { onMount, onDestroy } from "svelte";
   import type { TeamInvitationEntry, TeamInviteProgress, InvitationSummary } from "$lib/types";
   import Icon from "./Icon.svelte";
+  import * as jsyaml from "js-yaml";
 
   let {
     token = "",
@@ -78,18 +79,120 @@
     }
   }
 
-  function handleFileUpload(event: Event) {
+  function handleYamlImport(event: Event) {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files[0]) {
       const file = input.files[0];
       const reader = new FileReader();
       reader.onload = async (e) => {
-        rawInput = (e.target?.result as string) || "";
-        await updatePreview();
-        onLog("info", `Uploaded and loaded file: ${file.name}`);
+        try {
+          const content = (e.target?.result as string) || "";
+          if (!content.trim()) return;
+
+          const parsed = jsyaml.load(content) as any;
+          if (!parsed || typeof parsed !== "object") {
+            throw new Error("Invalid YAML structure: Expected a root YAML mapping/object.");
+          }
+
+          // 1. Organization Name
+          const org = parsed.organization || parsed.organization_name || parsed.org || parsed.org_name || "";
+          if (org) {
+            orgName = String(org).trim();
+          }
+
+          // 2. Team Membership Role
+          const rawRole = parsed.role || parsed.team_membership_role || parsed.membership_role || "";
+          if (rawRole) {
+            role = String(rawRole).toLowerCase().includes("maintainer") ? "maintainer" : "member";
+          }
+
+          // 3. Invitation List
+          const rawInvites = parsed.invitations || parsed.invitation_list || parsed.users || parsed.members;
+          let lines: string[] = [];
+
+          if (Array.isArray(rawInvites)) {
+            for (const item of rawInvites) {
+              if (typeof item === "string") {
+                if (item.trim()) lines.push(item.trim());
+              } else if (item && typeof item === "object") {
+                const user = item.user || item.username || item.github_user || item.name || "";
+                const teams = item.teams || item.team_list || item.team || [];
+                const teamList = Array.isArray(teams) ? teams.join(",") : String(teams);
+                if (user) {
+                  lines.push(teamList ? `${user},${teamList}` : user);
+                }
+              }
+            }
+          } else if (rawInvites && typeof rawInvites === "object") {
+            for (const [user, teams] of Object.entries(rawInvites)) {
+              const teamList = Array.isArray(teams) ? teams.join(",") : String(teams);
+              lines.push(teamList ? `${user},${teamList}` : user);
+            }
+          } else if (typeof rawInvites === "string") {
+            lines = rawInvites.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+          }
+
+          if (lines.length > 0) {
+            rawInput = lines.join("\n");
+          }
+
+          await updatePreview();
+          onLog(
+            "success",
+            `Imported YAML (${file.name}): Org: "${orgName || "N/A"}", Role: ${role}, ${parsedEntries.length} user(s).`
+          );
+        } catch (err: any) {
+          console.error("YAML Import Error:", err);
+          onLog("error", `Failed to import YAML: ${err.message || err}`);
+          alert(`Failed to import YAML: ${err.message || err}`);
+        } finally {
+          input.value = "";
+        }
       };
       reader.readAsText(file);
     }
+  }
+
+  function exportYamlFile() {
+    const inviteItems: Array<{ user: string; teams: string[] }> = [];
+    for (const entry of parsedEntries) {
+      inviteItems.push({
+        user: entry.username,
+        teams: entry.teams.map((t) => t.display_name || t.slug),
+      });
+    }
+
+    const doc = {
+      organization: orgName.trim() || "sample-org",
+      role,
+      invitations:
+        inviteItems.length > 0
+          ? inviteItems
+          : rawInput
+              .split(/\r?\n/)
+              .map((l) => l.trim())
+              .filter(Boolean)
+              .map((line) => {
+                const parts = line.split(",").map((p) => p.trim());
+                return {
+                  user: parts[0] || "",
+                  teams: parts.slice(1).filter(Boolean),
+                };
+              }),
+    };
+
+    const yamlStr = jsyaml.dump(doc, { indent: 2, lineWidth: -1 });
+    const blob = new Blob([yamlStr], { type: "text/yaml" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const cleanOrg = orgName.trim().replace(/[^a-zA-Z0-9_-]/g, "_") || "team_invitations";
+    a.download = `team_invitations_${cleanOrg}.yaml`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    onLog("info", `Exported team invitations configuration to ${a.download}`);
   }
 
   function clearAll() {
@@ -247,10 +350,20 @@
           <h3>1. Invitation List Input</h3>
         </div>
         <div class="panel-actions">
-          <label class="action-btn file-btn" title="Upload local CSV or TXT file">
+          <button
+            type="button"
+            class="action-btn"
+            onclick={exportYamlFile}
+            disabled={!orgName && !rawInput}
+            title="Export Team Invitations configuration as YAML file"
+          >
+            <Icon name="download" size={14} color="#4f46e5" />
+            <span>Export YAML</span>
+          </button>
+          <label class="action-btn file-btn" title="Import Team Invitations configuration from YAML file (.yaml, .yml)">
             <Icon name="upload" size={14} color="#059669" />
-            <span>Upload File</span>
-            <input type="file" accept=".csv,.txt" onchange={handleFileUpload} />
+            <span>Import YAML</span>
+            <input type="file" accept=".yaml,.yml,.txt" onchange={handleYamlImport} />
           </label>
           <button type="button" class="action-btn btn-danger-ghost" onclick={clearAll} title="Clear text input">
             <Icon name="trash" size={14} color="#e11d48" />
@@ -264,9 +377,11 @@
         <textarea
           id="invitations-raw-editor"
           bind:value={rawInput}
-          placeholder={`# Format Options:
-# 1. username,team1,team2
-# 2. username|team1,team2`}
+          placeholder={`# Enter invitations below or click "Import YAML" above.
+# Format: username,team1,team2,...
+# Example:
+# alice,Frontend,Engineering
+# bob,Backend,Platform`}
           rows={11}
           class="pastel-textarea"
           spellcheck="false"
@@ -276,7 +391,7 @@
       <div class="panel-footer">
         <div class="syntax-guide-wrap">
           <span class="syntax-guide">
-            Syntax: <code>username,team1,team2</code> or <code>username|team1,team2</code>.
+            Syntax: <code>username,team1,team2</code> or import a Team Invitations <code>.yaml</code> file.
           </span>
           {#if hasUnparsedChanges}
             <span class="unparsed-indicator">

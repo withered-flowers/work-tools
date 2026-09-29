@@ -1,0 +1,28 @@
+# ==============================================================================
+# GitHub Team Invitations Configuration
+# Import this file using the "Import YAML" button in Module 001.
+# ==============================================================================
+
+organization: acme-corp
+role: member # Options: member, maintainer
+
+invitations:
+  - user: octocat
+    teams:
+      - Core Engineering
+      - Platform Team
+  - user: alexsmith
+    teams:
+      - Frontend Team
+      - UI-UX Guild
+  - user: janedoe
+    teams:
+      - Backend Team
+      - Cloud Architecture
+  - user: johndoe
+    teams:
+      - Data Engineering
+  - user: samwilson
+    teams:
+      - Security Operations
+      - DevOps Team

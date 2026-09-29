@@ -11,6 +11,7 @@
   } from "$lib/types";
   import Icon from "./Icon.svelte";
   import DateTimePicker from "./DateTimePicker.svelte";
+  import * as jsyaml from "js-yaml";
 
   let {
     token = "",
@@ -21,6 +22,7 @@
   } = $props();
 
   // Global Configuration
+  let configName = $state("");
   let orgName = $state("");
   let reviewersInput = $state("");
   let dryRun = $state(true);
@@ -152,18 +154,25 @@
       alert("No templates in catalog to save.");
       return;
     }
-    const dataStr = JSON.stringify(templates, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
+    const doc = {
+      templates: templates.map((t) => ({
+        key: t.key || null,
+        repo: t.repo,
+        deadline: t.deadline,
+      })),
+    };
+    const dataStr = jsyaml.dump(doc, { indent: 2, lineWidth: -1 });
+    const blob = new Blob([dataStr], { type: "text/yaml" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     const cleanOrg = orgName.trim().replace(/[^a-zA-Z0-9_-]/g, "_") || "catalog";
-    a.download = `template_catalog_${cleanOrg}.json`;
+    a.download = `template_catalog_${cleanOrg}.yaml`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    onLog("info", `Saved ${templates.length} templates to template_catalog_${cleanOrg}.json`);
+    onLog("info", `Saved ${templates.length} templates to template_catalog_${cleanOrg}.yaml`);
   }
 
   function handleCatalogImport(event: Event) {
@@ -178,14 +187,29 @@
 
           let imported: TemplateEntry[] = [];
 
-          if (file.name.endsWith(".json") || content.trim().startsWith("[") || content.trim().startsWith("{")) {
-            const data = JSON.parse(content);
-            const list = Array.isArray(data) ? data : (data.templates || []);
+          if (
+            file.name.endsWith(".yaml") ||
+            file.name.endsWith(".yml") ||
+            file.name.endsWith(".json") ||
+            content.trim().startsWith("[") ||
+            content.trim().startsWith("{")
+          ) {
+            let data: any;
+            try {
+              data = jsyaml.load(content);
+            } catch {
+              data = JSON.parse(content);
+            }
+
+            const list = Array.isArray(data)
+              ? data
+              : (data.template_catalog || data.templates || data.template_repository_catalog || data.catalog || []);
+
             imported = list
               .map((item: any) => ({
                 key: item.key ? String(item.key).trim() : null,
-                repo: String(item.repo || item.name || "").trim(),
-                deadline: normalizeDeadline(item.deadline),
+                repo: String(item.repo || item.repository || item.name || "").trim(),
+                deadline: normalizeDeadline(item.deadline || item.due_date),
               }))
               .filter((t: TemplateEntry) => t.repo.length > 0);
           } else {
@@ -225,25 +249,182 @@
         } catch (err: any) {
           onLog("error", `Failed to import catalog file: ${err}`);
           alert(`Error importing catalog file: ${err.message || err}`);
+        } finally {
+          input.value = "";
         }
       };
       reader.readAsText(file);
-      input.value = "";
     }
   }
 
-  function handleFileUpload(event: Event) {
+  function handleProvisioningYamlImport(event: Event) {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files[0]) {
       const file = input.files[0];
       const reader = new FileReader();
       reader.onload = async (e) => {
-        rawAssignmentsInput = (e.target?.result as string) || "";
-        await updatePreview();
-        onLog("info", `Uploaded and loaded file: ${file.name}`);
+        try {
+          const content = (e.target?.result as string) || "";
+          if (!content.trim()) return;
+
+          const parsed = jsyaml.load(content) as any;
+          if (!parsed || typeof parsed !== "object") {
+            throw new Error("Invalid YAML structure: Expected a root YAML mapping/object.");
+          }
+
+          // 1. Name
+          const rawName = parsed.name || parsed.config_name || parsed.title;
+          if (rawName) {
+            configName = String(rawName).trim();
+          }
+
+          // 2. Organization Name
+          const org = parsed.organization || parsed.organization_name || parsed.org || parsed.org_name;
+          if (org) {
+            orgName = String(org).trim();
+          }
+
+          // 3. List of Maintainers / Reviewers
+          const rawMaintainers = parsed.maintainers || parsed.list_of_maintainers || parsed.reviewers || parsed.reviewers_list;
+          if (Array.isArray(rawMaintainers)) {
+            reviewersInput = rawMaintainers.map((m) => String(m).trim()).filter(Boolean).join(", ");
+          } else if (typeof rawMaintainers === "string") {
+            reviewersInput = rawMaintainers.trim();
+          }
+
+          // 4. Template Repository Catalog
+          const rawCatalog =
+            parsed.template_catalog ||
+            parsed.template_repository_catalog ||
+            parsed.templates ||
+            parsed.catalog;
+          if (Array.isArray(rawCatalog) && rawCatalog.length > 0) {
+            templates = rawCatalog
+              .map((item: any) => ({
+                key: item.key ? String(item.key).trim() : null,
+                repo: String(item.repo || item.repository || item.name || "").trim(),
+                deadline: normalizeDeadline(item.deadline || item.due_date),
+              }))
+              .filter((t: TemplateEntry) => t.repo.length > 0);
+          }
+
+          // 5. User Assignments Inputs
+          const rawAssignments =
+            parsed.assignments ||
+            parsed.user_assignments ||
+            parsed.user_assignments_inputs;
+          let assignmentLines: string[] = [];
+          if (Array.isArray(rawAssignments)) {
+            for (const item of rawAssignments) {
+              if (typeof item === "string") {
+                if (item.trim()) assignmentLines.push(item.trim());
+              } else if (item && typeof item === "object") {
+                const user = item.user || item.username || item.student || "";
+                const prefix = item.prefix || item.cohort || item.batch || "";
+                const tmpls = item.templates || item.template_list || item.template || [];
+                const tmplStr = Array.isArray(tmpls) ? tmpls.join(",") : String(tmpls);
+                if (user) {
+                  if (prefix) {
+                    assignmentLines.push(`${user},${prefix},${tmplStr}`);
+                  } else {
+                    assignmentLines.push(`${user},${tmplStr}`);
+                  }
+                }
+              }
+            }
+          } else if (typeof rawAssignments === "string") {
+            assignmentLines = rawAssignments.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+          }
+
+          if (assignmentLines.length > 0) {
+            rawAssignmentsInput = assignmentLines.join("\n");
+          }
+
+          await updatePreview();
+          onLog(
+            "success",
+            `Imported YAML (${file.name}): ${configName ? `"${configName}", ` : ""}Org: "${orgName || "N/A"}", ${templates.length} template(s), ${parsedPlans.length} plan(s).`
+          );
+        } catch (err: any) {
+          console.error("Provisioning YAML Import Error:", err);
+          onLog("error", `Failed to import YAML: ${err.message || err}`);
+          alert(`Failed to import YAML: ${err.message || err}`);
+        } finally {
+          input.value = "";
+        }
       };
       reader.readAsText(file);
     }
+  }
+
+  function exportProvisioningYamlFile() {
+    const maintainersList = reviewersInput
+      .split(",")
+      .map((r) => r.trim())
+      .filter(Boolean);
+
+    const catalogList = templates.map((t) => ({
+      key: t.key || null,
+      repo: t.repo,
+      deadline: t.deadline,
+    }));
+
+    // Group parsed plans by user and prefix for clean YAML formatting
+    const assignmentObjects = parsedPlans.reduce<
+      Array<{ user: string; prefix?: string; templates: string[] }>
+    >((acc, plan) => {
+      let existing = acc.find(
+        (a) => a.user === plan.username && a.prefix === (plan.prefix || undefined)
+      );
+      if (!existing) {
+        existing = {
+          user: plan.username,
+          ...(plan.prefix ? { prefix: plan.prefix } : {}),
+          templates: [],
+        };
+        acc.push(existing);
+      }
+      if (!existing.templates.includes(plan.template_repo)) {
+        existing.templates.push(plan.template_repo);
+      }
+      return acc;
+    }, []);
+
+    const doc: any = {
+      name: configName.trim() || "Repository Provisioning Configuration",
+      organization: orgName.trim() || "sample-org",
+      maintainers: maintainersList,
+      template_catalog: catalogList,
+      assignments:
+        assignmentObjects.length > 0
+          ? assignmentObjects
+          : rawAssignmentsInput
+              .split(/\r?\n/)
+              .map((l) => l.trim())
+              .filter(Boolean)
+              .map((line) => {
+                const parts = line.split(",").map((p) => p.trim());
+                if (parts.length >= 3) {
+                  return { user: parts[0], prefix: parts[1], templates: parts.slice(2) };
+                } else if (parts.length === 2) {
+                  return { user: parts[0], templates: [parts[1]] };
+                }
+                return { user: parts[0] || "", templates: [] };
+              }),
+    };
+
+    const yamlStr = jsyaml.dump(doc, { indent: 2, lineWidth: -1 });
+    const blob = new Blob([yamlStr], { type: "text/yaml" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    const cleanOrg = orgName.trim().replace(/[^a-zA-Z0-9_-]/g, "_") || "repo_provisioning";
+    a.download = `repo_provisioning_${cleanOrg}.yaml`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    onLog("info", `Exported repository provisioning configuration to ${a.download}`);
   }
 
   function clearAssignments() {
@@ -320,15 +501,41 @@
   <!-- Top Global Configuration Card -->
   <section class="pastel-card">
     <div class="card-headline">
-      <div class="headline-left">
-        <div class="workflow-tag">
-          <Icon name="repo" size={14} color="#4f46e5" />
-          <span>MODULE 002</span>
+      <div class="card-headline-top">
+        <div class="headline-left">
+          <div class="workflow-tag">
+            <Icon name="repo" size={14} color="#4f46e5" />
+            <span>MODULE 002</span>
+          </div>
+          <h2 class="workflow-title">
+            Assignment Repository Provisioning
+            {#if configName}
+              <span class="config-name-badge" title="Configuration: {configName}">
+                {configName}
+              </span>
+            {/if}
+          </h2>
         </div>
-        <h2 class="workflow-title">Assignment Repository Provisioning</h2>
+        <div class="headline-actions">
+          <button
+            type="button"
+            class="action-btn"
+            onclick={exportProvisioningYamlFile}
+            disabled={!orgName && templates.length === 0 && !rawAssignmentsInput}
+            title="Export complete Repository Provisioning configuration as YAML file"
+          >
+            <Icon name="download" size={14} color="#4f46e5" />
+            <span>Export YAML</span>
+          </button>
+          <label class="action-btn file-btn" title="Import complete Repository Provisioning configuration from YAML file (.yaml, .yml)">
+            <Icon name="upload" size={14} color="#059669" />
+            <span>Import YAML</span>
+            <input type="file" accept=".yaml,.yml,.txt" onchange={handleProvisioningYamlImport} />
+          </label>
+        </div>
       </div>
       <p class="workflow-desc">
-        Automated provisioning pipeline: Template generation &rarr; User write access &rarr; Reviewer maintain access &rarr; Deadline milestone & issue notification &rarr; Feedback Pull Request. Replicates <code>002_create_repos.sh</code>.
+        Automated provisioning pipeline: Template generation &rarr; User write access &rarr; Reviewer maintain access &rarr; Deadline milestone & issue notification &rarr; Feedback Pull Request.
       </p>
     </div>
 
@@ -409,10 +616,10 @@
       </div>
       <div class="catalog-actions">
         <!-- File Importer -->
-        <label class="action-btn file-btn" title="Import templates from JSON or CSV file">
+        <label class="action-btn file-btn" title="Import templates from YAML, JSON, or CSV file">
           <Icon name="upload" size={13} color="#059669" />
-          <span>Import File</span>
-          <input type="file" accept=".json,.csv,.txt" onchange={handleCatalogImport} />
+          <span>Import Catalog</span>
+          <input type="file" accept=".yaml,.yml,.json,.csv,.txt" onchange={handleCatalogImport} />
         </label>
 
         <!-- File Saver -->
@@ -421,10 +628,10 @@
           class="action-btn"
           onclick={saveCatalogToFile}
           disabled={templates.length === 0}
-          title="Save catalog to JSON file"
+          title="Save catalog to YAML file"
         >
           <Icon name="save" size={13} color="#4f46e5" />
-          <span>Save File</span>
+          <span>Save Catalog</span>
         </button>
 
         <!-- Clear Catalog -->
@@ -556,10 +763,10 @@
           <h3>1. User Assignments Input</h3>
         </div>
         <div class="panel-actions">
-          <label class="action-btn file-btn" title="Upload local CSV or TXT file">
+          <label class="action-btn file-btn" title="Import Repository Provisioning configuration from YAML file (.yaml, .yml)">
             <Icon name="upload" size={14} color="#059669" />
-            <span>Upload File</span>
-            <input type="file" accept=".csv,.txt" onchange={handleFileUpload} />
+            <span>Import YAML</span>
+            <input type="file" accept=".yaml,.yml,.txt" onchange={handleProvisioningYamlImport} />
           </label>
           <button type="button" class="action-btn btn-danger-ghost" onclick={clearAssignments} title="Clear text input">
             <Icon name="trash" size={14} color="#e11d48" />
@@ -576,7 +783,7 @@
           placeholder={`# Format options:
 # 1. username,prefix,template1,template2
 # 2. username|prefix|template1,template2
-# 3. username|prefix (assigns all templates)`}
+# Or click "Import YAML" above to load a provisioning YAML file.`}
           rows={11}
           class="pastel-textarea"
           spellcheck="false"
@@ -586,7 +793,7 @@
       <div class="panel-footer">
         <div class="syntax-guide-wrap">
           <span class="syntax-guide">
-            Format: <code>user,prefix,templates</code> or <code>user|prefix|templates</code>.
+            Format: <code>user,prefix,templates</code> or import a Provisioning <code>.yaml</code> file.
           </span>
           {#if hasUnparsedChanges}
             <span class="unparsed-indicator">
@@ -820,13 +1027,46 @@
 
   .card-headline {
     margin-bottom: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+  }
+
+  .card-headline-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .config-name-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.55rem;
+    background: #f0fdf4;
+    border: 1px solid #bbf7d0;
+    border-radius: 9999px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.725rem;
+    font-weight: 600;
+    color: #15803d;
+    margin-left: 0.5rem;
+    vertical-align: middle;
+  }
+
+  .headline-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
   }
 
   .headline-left {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    margin-bottom: 0.35rem;
+    flex-wrap: wrap;
   }
 
   .workflow-tag {
@@ -856,15 +1096,6 @@
     color: #475569;
     font-size: 0.825rem;
     margin: 0;
-  }
-
-  .workflow-desc code {
-    font-family: 'JetBrains Mono', monospace;
-    color: #1e293b;
-    background: #f1f5f9;
-    padding: 0.1rem 0.35rem;
-    border-radius: 4px;
-    border: 1px solid #e2e8f0;
   }
 
   .config-grid {
