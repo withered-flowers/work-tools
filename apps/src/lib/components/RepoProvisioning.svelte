@@ -22,7 +22,6 @@
   } = $props();
 
   // Global Configuration
-  let configName = $state("");
   let orgName = $state("");
   let reviewersInput = $state("");
   let dryRun = $state(true);
@@ -149,114 +148,6 @@
     onLog("info", "Cleared all template repository entries.");
   }
 
-  function saveCatalogToFile() {
-    if (templates.length === 0) {
-      alert("No templates in catalog to save.");
-      return;
-    }
-    const doc = {
-      templates: templates.map((t) => ({
-        key: t.key || null,
-        repo: t.repo,
-        deadline: t.deadline,
-      })),
-    };
-    const dataStr = jsyaml.dump(doc, { indent: 2, lineWidth: -1 });
-    const blob = new Blob([dataStr], { type: "text/yaml" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const cleanOrg = orgName.trim().replace(/[^a-zA-Z0-9_-]/g, "_") || "catalog";
-    a.download = `template_catalog_${cleanOrg}.yaml`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-    onLog("info", `Saved ${templates.length} templates to template_catalog_${cleanOrg}.yaml`);
-  }
-
-  function handleCatalogImport(event: Event) {
-    const input = event.target as HTMLInputElement;
-    if (input.files && input.files[0]) {
-      const file = input.files[0];
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const content = (e.target?.result as string) || "";
-          if (!content.trim()) return;
-
-          let imported: TemplateEntry[] = [];
-
-          if (
-            file.name.endsWith(".yaml") ||
-            file.name.endsWith(".yml") ||
-            file.name.endsWith(".json") ||
-            content.trim().startsWith("[") ||
-            content.trim().startsWith("{")
-          ) {
-            let data: any;
-            try {
-              data = jsyaml.load(content);
-            } catch {
-              data = JSON.parse(content);
-            }
-
-            const list = Array.isArray(data)
-              ? data
-              : (data.template_catalog || data.templates || data.template_repository_catalog || data.catalog || []);
-
-            imported = list
-              .map((item: any) => ({
-                key: item.key ? String(item.key).trim() : null,
-                repo: String(item.repo || item.repository || item.name || "").trim(),
-                deadline: normalizeDeadline(item.deadline || item.due_date),
-              }))
-              .filter((t: TemplateEntry) => t.repo.length > 0);
-          } else {
-            // CSV / text lines:
-            // Format: key,repo,deadline or repo,deadline or repo
-            const lines = content.split(/\r?\n/);
-            for (const line of lines) {
-              const trimmed = line.trim();
-              if (!trimmed || trimmed.startsWith("#")) continue;
-              if (trimmed.toLowerCase().startsWith("repo") || trimmed.toLowerCase().startsWith("key,repo")) continue;
-
-              const parts = trimmed.split(",").map((p) => p.trim());
-              if (parts.length === 1) {
-                imported.push({ key: null, repo: parts[0], deadline: "2026-12-31T23:59" });
-              } else if (parts.length === 2) {
-                if (parts[1].includes("-") || parts[1].includes(":")) {
-                  imported.push({ key: null, repo: parts[0], deadline: normalizeDeadline(parts[1]) });
-                } else {
-                  imported.push({ key: parts[0], repo: parts[1], deadline: "2026-12-31T23:59" });
-                }
-              } else if (parts.length >= 3) {
-                imported.push({
-                  key: parts[0] ? parts[0] : null,
-                  repo: parts[1],
-                  deadline: normalizeDeadline(parts[2]),
-                });
-              }
-            }
-          }
-
-          if (imported.length > 0) {
-            templates = imported;
-            onLog("success", `Imported ${imported.length} templates from ${file.name}`);
-          } else {
-            alert("No valid templates found in the imported file.");
-          }
-        } catch (err: any) {
-          onLog("error", `Failed to import catalog file: ${err}`);
-          alert(`Error importing catalog file: ${err.message || err}`);
-        } finally {
-          input.value = "";
-        }
-      };
-      reader.readAsText(file);
-    }
-  }
-
   function handleProvisioningYamlImport(event: Event) {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files[0]) {
@@ -272,19 +163,13 @@
             throw new Error("Invalid YAML structure: Expected a root YAML mapping/object.");
           }
 
-          // 1. Name
-          const rawName = parsed.name || parsed.config_name || parsed.title;
-          if (rawName) {
-            configName = String(rawName).trim();
-          }
-
-          // 2. Organization Name
+          // 1. Organization Name
           const org = parsed.organization || parsed.organization_name || parsed.org || parsed.org_name;
           if (org) {
             orgName = String(org).trim();
           }
 
-          // 3. List of Maintainers / Reviewers
+          // 2. List of Maintainers / Reviewers
           const rawMaintainers = parsed.maintainers || parsed.list_of_maintainers || parsed.reviewers || parsed.reviewers_list;
           if (Array.isArray(rawMaintainers)) {
             reviewersInput = rawMaintainers.map((m) => String(m).trim()).filter(Boolean).join(", ");
@@ -292,7 +177,7 @@
             reviewersInput = rawMaintainers.trim();
           }
 
-          // 4. Template Repository Catalog
+          // 3. Template Repository Catalog
           const rawCatalog =
             parsed.template_catalog ||
             parsed.template_repository_catalog ||
@@ -308,7 +193,7 @@
               .filter((t: TemplateEntry) => t.repo.length > 0);
           }
 
-          // 5. User Assignments Inputs
+          // 4. User Assignments Inputs
           const rawAssignments =
             parsed.assignments ||
             parsed.user_assignments ||
@@ -343,7 +228,7 @@
           await updatePreview();
           onLog(
             "success",
-            `Imported YAML (${file.name}): ${configName ? `"${configName}", ` : ""}Org: "${orgName || "N/A"}", ${templates.length} template(s), ${parsedPlans.length} plan(s).`
+            `Imported YAML (${file.name}): Org: "${orgName || "N/A"}", ${templates.length} template(s), ${parsedPlans.length} plan(s).`
           );
         } catch (err: any) {
           console.error("Provisioning YAML Import Error:", err);
@@ -391,7 +276,6 @@
     }, []);
 
     const doc: any = {
-      name: configName.trim() || "Repository Provisioning Configuration",
       organization: orgName.trim() || "sample-org",
       maintainers: maintainersList,
       template_catalog: catalogList,
@@ -425,6 +309,19 @@
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     onLog("info", `Exported repository provisioning configuration to ${a.download}`);
+  }
+
+  function clearAll() {
+    orgName = "";
+    reviewersInput = "";
+    templates = [];
+    rawAssignmentsInput = "";
+    lastParsedInput = "";
+    parsedPlans = [];
+    currentProgress = null;
+    summary = null;
+    executionResults = [];
+    onLog("info", "Cleared all repository provisioning configurations, templates, and assignments.");
   }
 
   function clearAssignments() {
@@ -509,14 +406,14 @@
           </div>
           <h2 class="workflow-title">
             Assignment Repository Provisioning
-            {#if configName}
-              <span class="config-name-badge" title="Configuration: {configName}">
-                {configName}
-              </span>
-            {/if}
           </h2>
         </div>
         <div class="headline-actions">
+          <label class="action-btn file-btn" title="Import complete Repository Provisioning configuration from YAML file (.yaml, .yml)">
+            <Icon name="upload" size={14} color="#059669" />
+            <span>Import YAML</span>
+            <input type="file" accept=".yaml,.yml,.txt" onchange={handleProvisioningYamlImport} />
+          </label>
           <button
             type="button"
             class="action-btn"
@@ -527,11 +424,15 @@
             <Icon name="download" size={14} color="#4f46e5" />
             <span>Export YAML</span>
           </button>
-          <label class="action-btn file-btn" title="Import complete Repository Provisioning configuration from YAML file (.yaml, .yml)">
-            <Icon name="upload" size={14} color="#059669" />
-            <span>Import YAML</span>
-            <input type="file" accept=".yaml,.yml,.txt" onchange={handleProvisioningYamlImport} />
-          </label>
+          <button
+            type="button"
+            class="action-btn btn-danger-ghost"
+            onclick={clearAll}
+            title="Clear all configuration, templates, and assignments"
+          >
+            <Icon name="trash" size={14} color="#e11d48" />
+            <span>Clear</span>
+          </button>
         </div>
       </div>
       <p class="workflow-desc">
@@ -611,29 +512,10 @@
     <div class="panel-header">
       <div class="panel-title-group">
         <Icon name="repo" size={16} color="#4f46e5" />
-        <h3>Template Repository Catalog</h3>
+        <h3>1. Template Repository Catalog</h3>
         <span class="count-tag">{templates.length} templates</span>
       </div>
       <div class="catalog-actions">
-        <!-- File Importer -->
-        <label class="action-btn file-btn" title="Import templates from YAML, JSON, or CSV file">
-          <Icon name="upload" size={13} color="#059669" />
-          <span>Import Catalog</span>
-          <input type="file" accept=".yaml,.yml,.json,.csv,.txt" onchange={handleCatalogImport} />
-        </label>
-
-        <!-- File Saver -->
-        <button
-          type="button"
-          class="action-btn"
-          onclick={saveCatalogToFile}
-          disabled={templates.length === 0}
-          title="Save catalog to YAML file"
-        >
-          <Icon name="save" size={13} color="#4f46e5" />
-          <span>Save Catalog</span>
-        </button>
-
         <!-- Clear Catalog -->
         <button
           type="button"
@@ -652,7 +534,7 @@
       {#if templates.length === 0}
         <div class="empty-state-box catalog-empty">
           <Icon name="repo" size={28} color="#94a3b8" />
-          <p class="empty-text">No templates in catalog. Add a new template below or import a catalog file.</p>
+          <p class="empty-text">No templates in catalog. Add a new template below or import a YAML configuration.</p>
         </div>
       {:else}
         <table class="pro-table catalog-table">
@@ -760,14 +642,9 @@
       <div class="panel-header">
         <div class="panel-title-group">
           <Icon name="file" size={16} color="#4f46e5" />
-          <h3>1. User Assignments Input</h3>
+          <h3>2. User Assignments Input</h3>
         </div>
         <div class="panel-actions">
-          <label class="action-btn file-btn" title="Import Repository Provisioning configuration from YAML file (.yaml, .yml)">
-            <Icon name="upload" size={14} color="#059669" />
-            <span>Import YAML</span>
-            <input type="file" accept=".yaml,.yml,.txt" onchange={handleProvisioningYamlImport} />
-          </label>
           <button type="button" class="action-btn btn-danger-ghost" onclick={clearAssignments} title="Clear text input">
             <Icon name="trash" size={14} color="#e11d48" />
             <span>Clear</span>
@@ -783,7 +660,7 @@
           placeholder={`# Format options:
 # 1. username,prefix,template1,template2
 # 2. username|prefix|template1,template2
-# Or click "Import YAML" above to load a provisioning YAML file.`}
+# Or use "Import YAML" in the top card to load a provisioning YAML file.`}
           rows={11}
           class="pastel-textarea"
           spellcheck="false"
@@ -823,7 +700,7 @@
       <div class="panel-header">
         <div class="panel-title-group">
           <Icon name="check-circle" size={16} color="#059669" />
-          <h3>2. Pre-Flight Repository Matrix</h3>
+          <h3>3. Pre-Flight Repository Matrix</h3>
           {#if hasUnparsedChanges}
             <span class="preview-stale-tag" title="Click Re-parse to preview latest assignments and catalog">
               Unparsed Changes
@@ -1038,21 +915,6 @@
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 0.75rem;
-  }
-
-  .config-name-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 0.2rem 0.55rem;
-    background: #f0fdf4;
-    border: 1px solid #bbf7d0;
-    border-radius: 9999px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.725rem;
-    font-weight: 600;
-    color: #15803d;
-    margin-left: 0.5rem;
-    vertical-align: middle;
   }
 
   .headline-actions {

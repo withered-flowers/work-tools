@@ -264,12 +264,31 @@
   <!-- Top Configuration Header Card -->
   <section class="pastel-card">
     <div class="card-headline">
-      <div class="headline-left">
-        <div class="workflow-tag">
-          <Icon name="users" size={14} color="#4f46e5" />
-          <span>MODULE 001</span>
+      <div class="card-headline-top">
+        <div class="headline-left">
+          <div class="workflow-tag">
+            <Icon name="users" size={14} color="#4f46e5" />
+            <span>MODULE 001</span>
+          </div>
+          <h2 class="workflow-title">GitHub Organization Team Invitations</h2>
         </div>
-        <h2 class="workflow-title">GitHub Organization Team Invitations</h2>
+        <div class="headline-actions">
+          <label class="action-btn file-btn" title="Import Team Invitations configuration from YAML file (.yaml, .yml)">
+            <Icon name="upload" size={14} color="#059669" />
+            <span>Import YAML</span>
+            <input type="file" accept=".yaml,.yml,.txt" onchange={handleYamlImport} />
+          </label>
+          <button
+            type="button"
+            class="action-btn"
+            onclick={exportYamlFile}
+            disabled={!orgName && !rawInput}
+            title="Export Team Invitations configuration as YAML file"
+          >
+            <Icon name="download" size={14} color="#4f46e5" />
+            <span>Export YAML</span>
+          </button>
+        </div>
       </div>
       <p class="workflow-desc">
         Batch invite and synchronize GitHub users into organization teams with role enforcement. Replicates <code>001_invite_teams.sh</code> logic natively without shell calls.
@@ -300,8 +319,7 @@
         </label>
         <div class="select-container">
           <select id="team-role-select" bind:value={role} class="pastel-select">
-            <option value="member">member (Default membership)</option>
-            <option value="maintainer">maintainer (Team administrative access)</option>
+            <option value="member">member</option>
           </select>
         </div>
         <span class="form-hint">Assigned permission level for all invited users</span>
@@ -350,21 +368,6 @@
           <h3>1. Invitation List Input</h3>
         </div>
         <div class="panel-actions">
-          <button
-            type="button"
-            class="action-btn"
-            onclick={exportYamlFile}
-            disabled={!orgName && !rawInput}
-            title="Export Team Invitations configuration as YAML file"
-          >
-            <Icon name="download" size={14} color="#4f46e5" />
-            <span>Export YAML</span>
-          </button>
-          <label class="action-btn file-btn" title="Import Team Invitations configuration from YAML file (.yaml, .yml)">
-            <Icon name="upload" size={14} color="#059669" />
-            <span>Import YAML</span>
-            <input type="file" accept=".yaml,.yml,.txt" onchange={handleYamlImport} />
-          </label>
           <button type="button" class="action-btn btn-danger-ghost" onclick={clearAll} title="Clear text input">
             <Icon name="trash" size={14} color="#e11d48" />
             <span>Clear</span>
@@ -377,7 +380,7 @@
         <textarea
           id="invitations-raw-editor"
           bind:value={rawInput}
-          placeholder={`# Enter invitations below or click "Import YAML" above.
+          placeholder={`# Enter invitations below or use "Import YAML" in the top card.
 # Format: username,team1,team2,...
 # Example:
 # alice,Frontend,Engineering
@@ -615,11 +618,26 @@
     margin-bottom: 1.25rem;
   }
 
+  .card-headline-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .headline-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+  }
+
   .headline-left {
     display: flex;
     align-items: center;
     gap: 0.75rem;
-    margin-bottom: 0.35rem;
   }
 
   .workflow-tag {
