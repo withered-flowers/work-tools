@@ -21,8 +21,8 @@
   } = $props();
 
   // Global Configuration
-  let orgName = $state("ORGANIZATION-NAME");
-  let reviewersInput = $state("reviewer1, reviewer2");
+  let orgName = $state("");
+  let reviewersInput = $state("");
   let dryRun = $state(true);
 
   function normalizeDeadline(val?: string | null): string {
@@ -38,32 +38,14 @@
   }
 
   // Template Catalog
-  let templates = $state<TemplateEntry[]>([
-    {
-      key: "P0-LC1-Set-1",
-      repo: "ORGANIZATION-NAME/P0-LC1-Set-1",
-      deadline: "2026-12-31T23:59",
-    },
-    {
-      key: "P0-LC2-Set-1",
-      repo: "ORGANIZATION-NAME/P0-LC2-Set-1",
-      deadline: "2026-12-31T23:59",
-    },
-    {
-      key: "P0-LC3-Set-1",
-      repo: "ORGANIZATION-NAME/P0-LC3-Set-1",
-      deadline: "2026-12-31T23:59",
-    },
-  ]);
+  let templates = $state<TemplateEntry[]>([]);
 
   let newTemplateRepo = $state("");
   let newTemplateKey = $state("");
   let newTemplateDeadline = $state("2026-12-31T23:59");
 
   // User assignments input
-  let rawAssignmentsInput = $state(`user1,BATCH-045-DEV,P0-LC1-Set-1,P0-LC2-Set-1
-user2,BATCH-059-REM,P0-LC2-Set-1
-user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
+  let rawAssignmentsInput = $state("");
 
   let parsedPlans = $state<ProvisionPlan[]>([]);
   let lastParsedInput = $state("");
@@ -165,28 +147,6 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
     onLog("info", "Cleared all template repository entries.");
   }
 
-  function loadDefaultTemplates() {
-    const org = orgName.trim() || "ORGANIZATION-NAME";
-    templates = [
-      {
-        key: "P0-LC1-Set-1",
-        repo: `${org}/P0-LC1-Set-1`,
-        deadline: "2026-12-31T23:59",
-      },
-      {
-        key: "P0-LC2-Set-1",
-        repo: `${org}/P0-LC2-Set-1`,
-        deadline: "2026-12-31T23:59",
-      },
-      {
-        key: "P0-LC3-Set-1",
-        repo: `${org}/P0-LC3-Set-1`,
-        deadline: "2026-12-31T23:59",
-      },
-    ];
-    onLog("info", "Loaded 3 default template presets.");
-  }
-
   function saveCatalogToFile() {
     if (templates.length === 0) {
       alert("No templates in catalog to save.");
@@ -269,19 +229,6 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
       };
       reader.readAsText(file);
       input.value = "";
-    }
-  }
-
-  async function loadSampleAssignments() {
-    try {
-      const sample: string = await invoke("load_sample_file", {
-        sampleType: "repo_assignments",
-      });
-      rawAssignmentsInput = sample;
-      await updatePreview();
-      onLog("info", "Loaded sample assignments (002_xdummy_assignments.csv)");
-    } catch (e: any) {
-      onLog("error", `Failed to load sample assignments: ${e}`);
     }
   }
 
@@ -396,7 +343,7 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
             id="repo-org-input"
             type="text"
             bind:value={orgName}
-            placeholder="e.g. MY-ASSIGNMENT-ORG"
+            placeholder="e.g. ORGANIZATION-NAME"
             class="pastel-input"
           />
         </div>
@@ -480,17 +427,6 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
           <span>Save File</span>
         </button>
 
-        <!-- Load Presets -->
-        <button
-          type="button"
-          class="action-btn"
-          onclick={loadDefaultTemplates}
-          title="Reset to default cohort template presets"
-        >
-          <Icon name="refresh" size={13} color="#4f46e5" />
-          <span>Default Presets</span>
-        </button>
-
         <!-- Clear Catalog -->
         <button
           type="button"
@@ -509,10 +445,7 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
       {#if templates.length === 0}
         <div class="empty-state-box catalog-empty">
           <Icon name="repo" size={28} color="#94a3b8" />
-          <p class="empty-text">No templates in catalog. Load presets or add a new template below.</p>
-          <button type="button" class="btn-subtle" onclick={loadDefaultTemplates}>
-            Load Default Presets
-          </button>
+          <p class="empty-text">No templates in catalog. Add a new template below or import a catalog file.</p>
         </div>
       {:else}
         <table class="pro-table catalog-table">
@@ -533,7 +466,7 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
                   <input
                     type="text"
                     bind:value={t.repo}
-                    placeholder="e.g. ORGANIZATION-NAME/P0-LC1-Set-1"
+                    placeholder="e.g. ORGANIZATION-NAME/REPO-NAME"
                     class="table-cell-input repo-cell-input"
                   />
                 </td>
@@ -578,7 +511,7 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
           <input
             id="new-template-repo"
             type="text"
-            placeholder="e.g. ORGANIZATION-NAME/P0-LC4-Set-1"
+            placeholder="e.g. ORGANIZATION-NAME/REPO-NAME"
             bind:value={newTemplateRepo}
             class="pastel-input"
           />
@@ -623,10 +556,6 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
           <h3>1. User Assignments Input</h3>
         </div>
         <div class="panel-actions">
-          <button type="button" class="action-btn" onclick={loadSampleAssignments} title="Load sample assignments CSV">
-            <Icon name="file" size={14} color="#4f46e5" />
-            <span>Load Sample</span>
-          </button>
           <label class="action-btn file-btn" title="Upload local CSV or TXT file">
             <Icon name="upload" size={14} color="#059669" />
             <span>Upload File</span>
@@ -647,10 +576,7 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`);
           placeholder={`# Format options:
 # 1. username,prefix,template1,template2
 # 2. username|prefix|template1,template2
-# 3. username|prefix (assigns all templates)
-user1,BATCH-045-DEV,P0-LC1-Set-1,P0-LC2-Set-1
-user2,BATCH-059-REM,P0-LC2-Set-1
-user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`}
+# 3. username|prefix (assigns all templates)`}
           rows={11}
           class="pastel-textarea"
           spellcheck="false"
@@ -709,10 +635,7 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`}
         {#if parsedPlans.length === 0}
           <div class="empty-state-box">
             <Icon name="repo" size={32} color="#94a3b8" />
-            <p class="empty-text">No repository plans generated.</p>
-            <button type="button" class="btn-subtle" onclick={loadSampleAssignments}>
-              Load Sample Assignments
-            </button>
+            <p class="empty-text">No repository plans generated. Provide templates and user assignments above.</p>
           </div>
         {:else}
           <table class="pro-table">
@@ -1529,27 +1452,6 @@ user3,BATCH-044-DEV,P0-LC1-Set-1,P0-LC3-Set-1`}
     border: 1px solid #fde68a;
     padding: 0.15rem 0.5rem;
     border-radius: 9999px;
-  }
-
-  .btn-subtle {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    background: #f8fafc;
-    border: 1px solid #cbd5e1;
-    color: #334155;
-    padding: 0.35rem 0.65rem;
-    border-radius: 6px;
-    font-size: 0.775rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .btn-subtle:hover:not(:disabled) {
-    background: #eef2ff;
-    color: #4f46e5;
-    border-color: #c7d2fe;
   }
 
   /* Badge Cluster */

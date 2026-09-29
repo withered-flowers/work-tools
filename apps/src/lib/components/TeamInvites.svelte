@@ -13,13 +13,10 @@
     onLog?: (level: "info" | "success" | "warn" | "error", message: string) => void;
   } = $props();
 
-  let orgName = $state("ORGANIZATION-NAME");
+  let orgName = $state("");
   let role = $state<"member" | "maintainer">("member");
   let dryRun = $state(true);
-  let rawInput = $state(`octocat,Phase 1 - Set 1
-johndoe,Phase 1 - Set 1,Phase 2 - Set 1
-janedoe,phase-1-set-1,phase-2-set-1
-alexsmith,Phase 3 - Set 2`);
+  let rawInput = $state("");
 
   let parsedEntries = $state<TeamInvitationEntry[]>([]);
   let lastParsedInput = $state("");
@@ -78,19 +75,6 @@ alexsmith,Phase 3 - Set 2`);
       onLog("error", `Parsing error: ${e}`);
     } finally {
       isParsing = false;
-    }
-  }
-
-  async function loadSample() {
-    try {
-      const sample: string = await invoke("load_sample_file", {
-        sampleType: "team_invitations",
-      });
-      rawInput = sample;
-      await updatePreview();
-      onLog("info", "Loaded sample team invitations (001_xdummy_users.csv)");
-    } catch (e: any) {
-      onLog("error", `Failed to load sample: ${e}`);
     }
   }
 
@@ -200,7 +184,7 @@ alexsmith,Phase 3 - Set 2`);
             id="org-name-input"
             type="text"
             bind:value={orgName}
-            placeholder="e.g. My-Organization"
+            placeholder="e.g. ORGANIZATION-NAME"
             class="pastel-input"
           />
         </div>
@@ -263,10 +247,6 @@ alexsmith,Phase 3 - Set 2`);
           <h3>1. Invitation List Input</h3>
         </div>
         <div class="panel-actions">
-          <button type="button" class="action-btn" onclick={loadSample} title="Load sample users CSV">
-            <Icon name="file" size={14} color="#4f46e5" />
-            <span>Load Sample</span>
-          </button>
           <label class="action-btn file-btn" title="Upload local CSV or TXT file">
             <Icon name="upload" size={14} color="#059669" />
             <span>Upload File</span>
@@ -284,10 +264,9 @@ alexsmith,Phase 3 - Set 2`);
         <textarea
           id="invitations-raw-editor"
           bind:value={rawInput}
-          placeholder={`# Format: username,team1,team2,... or username|team1,team2
-octocat,Phase 1 - Set 1
-johndoe,Phase 1 - Set 1,Phase 2 - Set 1
-janedoe,phase-1-set-1,phase-2-set-1`}
+          placeholder={`# Format Options:
+# 1. username,team1,team2
+# 2. username|team1,team2`}
           rows={11}
           class="pastel-textarea"
           spellcheck="false"
@@ -350,10 +329,7 @@ janedoe,phase-1-set-1,phase-2-set-1`}
         {#if parsedEntries.length === 0}
           <div class="empty-state-box">
             <Icon name="file" size={32} color="#94a3b8" />
-            <p class="empty-text">No invitation entries detected.</p>
-            <button type="button" class="btn-subtle" onclick={loadSample}>
-              Load Sample Data
-            </button>
+            <p class="empty-text">No invitation entries detected. Enter usernames and teams above or upload a CSV file.</p>
           </div>
         {:else}
           <table class="pro-table">
@@ -955,27 +931,6 @@ janedoe,phase-1-set-1,phase-2-set-1`}
     border: 1px solid #fde68a;
     padding: 0.15rem 0.5rem;
     border-radius: 9999px;
-  }
-
-  .btn-subtle {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    background: #f8fafc;
-    border: 1px solid #cbd5e1;
-    color: #334155;
-    padding: 0.35rem 0.65rem;
-    border-radius: 6px;
-    font-size: 0.775rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.15s ease;
-  }
-
-  .btn-subtle:hover:not(:disabled) {
-    background: #eef2ff;
-    color: #4f46e5;
-    border-color: #c7d2fe;
   }
 
   /* Badge Cluster */

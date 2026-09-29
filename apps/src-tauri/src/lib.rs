@@ -13,7 +13,6 @@ pub fn run() {
             commands::run_team_invitations,
             commands::preview_repo_provisioning,
             commands::run_repo_provisioning,
-            commands::load_sample_file,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
