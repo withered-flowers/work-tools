@@ -137,13 +137,18 @@ pub fn parse_team_invitations(input: &str) -> Vec<TeamInvitationEntry> {
     results
 }
 
-/// Resolves template repo info from query string against the catalog, matching resolve_template_info in 002_create_repos.sh
+/// Resolves template repo info from query string against the catalog.
+/// Returns None if the template query is not found in the catalog.
 pub fn resolve_template_info(
     query: &str,
     catalog: &[TemplateEntry],
     org_name: &str,
-) -> ResolvedTemplateInfo {
+) -> Option<ResolvedTemplateInfo> {
     let query_clean = query.trim();
+    if query_clean.is_empty() {
+        return None;
+    }
+
     let mut matched_repo = String::new();
     let mut matched_deadline = String::new();
 
@@ -153,10 +158,10 @@ pub fn resolve_template_info(
         let cand_clean = clean_template_name(cand_base);
         let cand_key = t_entry.key.as_deref().unwrap_or("").trim();
 
-        if query_clean == cand_repo
-            || query_clean == cand_base
-            || query_clean == cand_clean
-            || (!cand_key.is_empty() && query_clean == cand_key)
+        if query_clean.eq_ignore_ascii_case(cand_repo)
+            || query_clean.eq_ignore_ascii_case(cand_base)
+            || query_clean.eq_ignore_ascii_case(&cand_clean)
+            || (!cand_key.is_empty() && query_clean.eq_ignore_ascii_case(cand_key))
         {
             matched_repo = cand_repo.to_string();
             matched_deadline = t_entry.deadline.trim().to_string();
@@ -165,13 +170,7 @@ pub fn resolve_template_info(
     }
 
     if matched_repo.is_empty() {
-        if query_clean.contains('/') {
-            matched_repo = query_clean.to_string();
-        } else if !org_name.trim().is_empty() {
-            matched_repo = format!("{}/{}", org_name.trim(), query_clean);
-        } else {
-            matched_repo = query_clean.to_string();
-        }
+        return None;
     }
 
     let org = if matched_repo.contains('/') {
@@ -198,12 +197,20 @@ pub fn resolve_template_info(
 
     let clean_repo = clean_template_name(&repo_basename);
 
-    ResolvedTemplateInfo {
-        full_repo: matched_repo,
+    let full_repo = if matched_repo.contains('/') {
+        matched_repo
+    } else if !org.is_empty() {
+        format!("{}/{}", org, matched_repo)
+    } else {
+        matched_repo
+    };
+
+    Some(ResolvedTemplateInfo {
+        full_repo,
         deadline: matched_deadline,
         clean_repo_name: clean_repo,
         org,
-    }
+    })
 }
 
 /// Parses raw user assignments and generates ProvisionPlan list, replicating 002_create_repos.sh
@@ -264,11 +271,8 @@ pub fn parse_repo_assignments(
                 raw_assignments.push((u, p, t));
             } else if parts.len() == 2 {
                 let u = parts[0].to_string();
-                if prefix_regex.is_match(parts[1]) {
-                    raw_assignments.push((u, parts[1].to_string(), "all".to_string()));
-                } else {
-                    raw_assignments.push((u, String::new(), parts[1].to_string()));
-                }
+                let t = parts[1].to_string();
+                raw_assignments.push((u, String::new(), t));
             } else {
                 raw_assignments.push((parts[0].to_string(), String::new(), "all".to_string()));
             }
@@ -322,8 +326,10 @@ pub fn parse_repo_assignments(
                 }
 
                 let t_candidates: Vec<String> =
-                    if t_raw == "all" || t_raw == "*" || t_raw.is_empty() {
+                    if t_raw == "all" || t_raw == "*" {
                         all_catalog_keys.clone()
+                    } else if t_raw.is_empty() {
+                        Vec::new()
                     } else {
                         t_raw
                             .split(',')
@@ -341,25 +347,27 @@ pub fn parse_repo_assignments(
         }
 
         for t_query in user_templates {
-            let resolved =
-                resolve_template_info(&t_query, &dynamic_catalog, default_org);
-            let target_repo_name = if !user_prefix.is_empty() {
-                format!("{}-{}-{}", resolved.clean_repo_name, user_prefix, user)
-            } else {
-                format!("{}-{}", resolved.clean_repo_name, user)
-            };
-            let full_target_repo = format!("{}/{}", resolved.org, target_repo_name);
-            let deadline_iso = format_deadline_iso(&resolved.deadline);
+            if let Some(resolved) =
+                resolve_template_info(&t_query, &dynamic_catalog, default_org)
+            {
+                let target_repo_name = if !user_prefix.is_empty() {
+                    format!("{}-{}-{}", resolved.clean_repo_name, user_prefix, user)
+                } else {
+                    format!("{}-{}", resolved.clean_repo_name, user)
+                };
+                let full_target_repo = format!("{}/{}", resolved.org, target_repo_name);
+                let deadline_iso = format_deadline_iso(&resolved.deadline);
 
-            plans.push(ProvisionPlan {
-                username: user.clone(),
-                prefix: user_prefix.clone(),
-                template_repo: resolved.full_repo,
-                deadline: resolved.deadline,
-                deadline_iso,
-                target_repo_name,
-                full_target_repo,
-            });
+                plans.push(ProvisionPlan {
+                    username: user.clone(),
+                    prefix: user_prefix.clone(),
+                    template_repo: resolved.full_repo,
+                    deadline: resolved.deadline,
+                    deadline_iso,
+                    target_repo_name,
+                    full_target_repo,
+                });
+            }
         }
     }
 
@@ -467,5 +475,43 @@ janedoe,phase-1-set-1,phase-2-set-1
         );
         assert_eq!(plans_no_prefix.len(), 1);
         assert_eq!(plans_no_prefix[0].target_repo_name, "P0-LC1-Set-1-user2");
+
+        // Test that templates NOT in catalog are strictly excluded
+        let input_with_unregistered = "user3,BATCH-045-DEV,P0-LC1-Set-1,NON-EXISTENT-TEMPLATE";
+        let plans_with_unregistered = parse_repo_assignments(
+            input_with_unregistered,
+            &catalog,
+            "ORGANIZATION-NAME",
+        );
+        assert_eq!(plans_with_unregistered.len(), 1);
+        assert_eq!(plans_with_unregistered[0].template_repo, "ORGANIZATION-NAME/P0-LC1-Set-1");
+
+        // Test pipe format with custom prefix and catalog key
+        let catalog_with_keys = vec![
+            TemplateEntry {
+                key: Some("Frontend".to_string()),
+                repo: "MY-ORG/template-fe".to_string(),
+                deadline: "2026-10-01 17:00".to_string(),
+            },
+        ];
+        let input_pipe = "studentA|cohort-alpha|frontend,unknown-repo";
+        let plans_pipe = parse_repo_assignments(
+            input_pipe,
+            &catalog_with_keys,
+            "MY-ORG",
+        );
+        assert_eq!(plans_pipe.len(), 1);
+        assert_eq!(plans_pipe[0].username, "studentA");
+        assert_eq!(plans_pipe[0].prefix, "cohort-alpha");
+        assert_eq!(plans_pipe[0].target_repo_name, "fe-cohort-alpha-studentA");
+        assert_eq!(plans_pipe[0].template_repo, "MY-ORG/template-fe");
+
+        // Test empty catalog yields 0 plans
+        let plans_empty = parse_repo_assignments(
+            "studentB||frontend",
+            &[],
+            "MY-ORG",
+        );
+        assert_eq!(plans_empty.len(), 0);
     }
 }

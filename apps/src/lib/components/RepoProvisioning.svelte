@@ -123,9 +123,29 @@
         const u = a.user.trim();
         const p = a.prefix.trim();
         const t = a.templates.trim();
-        return p ? `${u},${p},${t}` : `${u},${t}`;
+        return `${u}|${p}|${t}`;
       })
       .join("\n");
+  }
+
+  function isTemplateInCatalog(query: string): boolean {
+    const q = query.trim().toLowerCase();
+    if (!q || q === "all" || q === "*") return true;
+    return templates.some((t) => {
+      const candRepo = t.repo.trim().toLowerCase();
+      const candBase = (candRepo.split("/")[1] || candRepo).trim();
+      const candClean = candBase.replace(/^(template[-_]|[-_]template)/, "");
+      const candKey = (t.key || "").trim().toLowerCase();
+      return q === candRepo || q === candBase || q === candClean || (candKey !== "" && q === candKey);
+    });
+  }
+
+  function getInvalidTemplates(templateStr: string): string[] {
+    if (!templateStr.trim()) return [];
+    return templateStr
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s && s.toLowerCase() !== "all" && s !== "*" && !isTemplateInCatalog(s));
   }
 
   async function updatePreview(inputText?: string, catalog?: TemplateEntry[], targetOrg?: string) {
@@ -147,6 +167,20 @@
 
   function addAssignment() {
     if (!newAssignUser.trim()) return;
+
+    if (templates.length === 0) {
+      alert("Please add at least one template to the Template Repository Catalog before assigning templates to students.");
+      return;
+    }
+
+    const invalid = getInvalidTemplates(newAssignTemplates);
+    if (invalid.length > 0) {
+      alert(
+        `The following assigned template(s) are not in the Template Repository Catalog:\n- ${invalid.join("\n- ")}\n\nPlease choose from existing catalog templates or add them to the catalog first.`
+      );
+      return;
+    }
+
     assignments = [
       ...assignments,
       {
@@ -727,7 +761,14 @@
                       bind:value={item.templates}
                       placeholder="e.g. Web-Frontend, Backend-API"
                       class="table-cell-input"
+                      list="catalog-templates-options"
                     />
+                    {#if getInvalidTemplates(item.templates).length > 0}
+                      <div class="cell-warning-tag" title="These templates do not exist in the Template Repository Catalog and are excluded from the pre-flight matrix">
+                        <Icon name="alert" size={11} color="#b45309" />
+                        <span>Not in catalog: {getInvalidTemplates(item.templates).join(", ")}</span>
+                      </div>
+                    {/if}
                   </td>
                   <td style="text-align: center;">
                     <button
@@ -778,6 +819,7 @@
               placeholder="e.g. Web-Frontend, Backend-API"
               bind:value={newAssignTemplates}
               class="pastel-input"
+              list="catalog-templates-options"
             />
           </div>
         </div>
@@ -791,6 +833,16 @@
           <span>Add Assignment</span>
         </button>
       </div>
+
+      <!-- Template options datalist from catalog -->
+      <datalist id="catalog-templates-options">
+        {#each templates as t}
+          {#if t.key}
+            <option value={t.key}>{t.repo} ({t.key})</option>
+          {/if}
+          <option value={t.repo}>{t.repo}</option>
+        {/each}
+      </datalist>
 
       <div class="panel-footer" style="margin-top: 0.85rem;">
         <div class="syntax-guide-wrap">
@@ -1513,7 +1565,20 @@
     border-color: #fecdd3;
   }
 
-
+  .cell-warning-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    margin-top: 0.25rem;
+    font-size: 0.675rem;
+    font-weight: 600;
+    color: #b45309;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    padding: 0.1rem 0.4rem;
+    border-radius: 4px;
+    width: fit-content;
+  }
 
   .panel-footer {
     display: flex;
