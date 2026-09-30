@@ -79,6 +79,7 @@ jobs:
         working-directory: ./apps
 
       - name: Build Tauri application and publish to GitHub Releases
+        id: tauri_build
         uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -91,3 +92,79 @@ jobs:
           releaseDraft: ${{ github.event.inputs.draft == 'true' || github.event.inputs.draft == true }}
           prerelease: ${{ github.event.inputs.prerelease == 'true' || github.event.inputs.prerelease == true }}
           args: ${{ matrix.args }}
+
+      - name: Package Windows portable executable
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        run: |
+          VERSION="${{ steps.tauri_build.outputs.appVersion }}"
+          if [ -z "$VERSION" ]; then
+            VERSION=$(node -p "require('./apps/src-tauri/tauri.conf.json').version")
+          fi
+          echo "APP_VERSION=$VERSION" >> $GITHUB_ENV
+
+          # Determine release tag
+          TAG="${{ github.event.inputs.tag_name }}"
+          if [ -z "$TAG" ]; then
+            TAG="v$VERSION"
+          fi
+          echo "RELEASE_TAG=$TAG" >> $GITHUB_ENV
+
+          # Locate raw compiled Windows executable
+          EXE_PATH=""
+          if [ -f "./apps/src-tauri/target/release/apps.exe" ]; then
+            EXE_PATH="./apps/src-tauri/target/release/apps.exe"
+          elif [ -f "./apps/src-tauri/target/x86_64-pc-windows-msvc/release/apps.exe" ]; then
+            EXE_PATH="./apps/src-tauri/target/x86_64-pc-windows-msvc/release/apps.exe"
+          elif [ -f "./apps/src-tauri/target/release/github-automation-studio.exe" ]; then
+            EXE_PATH="./apps/src-tauri/target/release/github-automation-studio.exe"
+          elif [ -f "./apps/src-tauri/target/x86_64-pc-windows-msvc/release/github-automation-studio.exe" ]; then
+            EXE_PATH="./apps/src-tauri/target/x86_64-pc-windows-msvc/release/github-automation-studio.exe"
+          else
+            EXE_PATH=$(find ./apps/src-tauri/target -type f -name "*.exe" ! -path "*/bundle/*" ! -path "*/deps/*" ! -path "*/build/*" ! -name "build_script_build*" | head -n 1)
+          fi
+
+          if [ -z "$EXE_PATH" ] || [ ! -f "$EXE_PATH" ]; then
+            echo "Error: Could not locate compiled Windows binary!"
+            find ./apps/src-tauri/target -name "*.exe" || true
+            exit 1
+          fi
+
+          echo "Found compiled executable at: $EXE_PATH"
+
+          mkdir -p ./portable-dist
+          PORTABLE_EXE="./portable-dist/GitHub-Automation-Studio_${VERSION}_x64_portable.exe"
+          PORTABLE_ZIP="./portable-dist/GitHub-Automation-Studio_${VERSION}_x64_portable.zip"
+
+          cp "$EXE_PATH" "$PORTABLE_EXE"
+
+          # Create a compressed zip containing the portable exe
+          if command -v 7z >/dev/null 2>&1; then
+            7z a "$PORTABLE_ZIP" "$PORTABLE_EXE"
+          elif command -v zip >/dev/null 2>&1; then
+            zip -j "$PORTABLE_ZIP" "$PORTABLE_EXE"
+          elif command -v tar >/dev/null 2>&1; then
+            tar -a -c -f "$PORTABLE_ZIP" -C ./portable-dist "GitHub-Automation-Studio_${VERSION}_x64_portable.exe"
+          fi
+
+          echo "Contents of portable-dist:"
+          ls -la ./portable-dist
+
+      - name: Upload Windows portable executable to GitHub Releases
+        if: matrix.platform == 'windows-latest'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          echo "Uploading portable executable to release $RELEASE_TAG..."
+          gh release upload "$RELEASE_TAG" ./portable-dist/* --clobber
+          echo "Successfully uploaded Windows portable executable to release $RELEASE_TAG"
+
+      - name: Upload Windows portable executable as workflow artifact
+        if: matrix.platform == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-portable-x64
+          path: ./portable-dist/
+          if-no-files-found: warn

@@ -239,10 +239,10 @@ A GitHub Actions workflow is configured in [`.github/workflows/release.yml`](fil
 6. Click **Run workflow**.
 
 GitHub Actions will execute concurrent matrix builds for:
-- **Windows (`windows-latest`)**: Generates `.exe` (NSIS setup) and `.msi` (WiX installer).
+- **Windows (`windows-latest`)**: Generates `.exe` (NSIS setup installer), `.msi` (WiX installer), and standalone portable `.exe` (along with `.zip` package).
 - **macOS (`macos-latest`)**: Generates `.dmg` and `.app` bundles for both **Apple Silicon** (`aarch64-apple-darwin`) and **Intel** (`x86_64-apple-darwin`) architectures.
 
-All installer bundles will be automatically attached and published directly to your repository's **Releases** page.
+All installer bundles and portable binaries will be automatically attached and published directly to your repository's **Releases** page (and available as workflow artifacts).
 
 ---
 
